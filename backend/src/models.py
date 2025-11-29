@@ -111,9 +111,6 @@ class TargetGroup(BaseModel, table=True):
     economic_status: str | None = None  # e.g., "mid to high income"
     description: str | None = None  # free text description
 
-    # Relationships
-    campaign_flows: list[CampaignFlow] = Relationship(back_populates='target_group')
-
 
 # ---------------------------------------------------------
 # Campaigns and Flows
@@ -125,9 +122,7 @@ class Campaign(BaseModel, table=True):
 
     name: str = Field(index=True)
     base_prompt: str  # generic prompt template for the campaign
-
-    # Relationships
-    campaign_flows: list[CampaignFlow] = Relationship(back_populates='campaign')
+    base_assets: list[Asset] = Relationship(back_populates='campaign')
 
 
 class CampaignFlow(BaseModel, table=True):
@@ -300,3 +295,35 @@ class AnalyticsBestImage(BaseModel, table=True):
     # Relationships
     analytics_result: AnalyticsResult | None = Relationship(back_populates='analytics_best_images')
     campaign_image: CampaignImage | None = Relationship(back_populates='analytics_best_images')
+
+
+# ---------------------------------------------------------
+# Response Models (non-table, for API responses)
+# ---------------------------------------------------------
+
+
+class CampaignImageResponse(SQLModel):
+    """Response model combining CampaignImage and GeneratedImage data."""
+
+    # From CampaignImage
+    id: UUID
+    created_at: datetime
+    step_id: UUID
+    generated_image_id: UUID
+    headline: str | None = None
+    description_line1: str | None = None
+    description_line2: str | None = None
+    final_prompt: str
+    impressions: int = 0
+    clicks: int = 0
+    conversions: int = 0
+    cost: float = 0.0
+    ctr: float = 0.0
+    conversion_rate: float = 0.0
+    cpc: float = 0.0
+    cpa: float = 0.0
+
+    # From GeneratedImage
+    file_name: str  # path or URL of the image
+    metadata_tags: list[str] | None = None
+    model_version: str | None = None
