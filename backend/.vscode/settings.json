@@ -1,0 +1,17 @@
+{
+    // Exclude files
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/.ruff_cache": true,
+      "**/.pytest_cache": true
+    },
+    // Format on save
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit"
+    },
+    // Default formatters
+    "[python]": {
+      "editor.defaultFormatter": "charliermarsh.ruff"
+    }
+}
