@@ -69,3 +69,27 @@ class Asset(BaseModel, table=True):
     embedding: list[float] | None = Field(
         default=None, sa_column_kwargs={'type_': 'JSON'}
     )  # embedding vector (optional, may not be generated yet)
+
+
+class AssetCreate(SQLModel):
+    """Schema for creating an asset."""
+
+    name: str
+    file_name: str
+    asset_type: AssetType
+    caption: str
+    tags: list[str] = Field(default_factory=list)
+    embedding_model: str | None = None
+    embedding: list[float] | None = None
+
+
+class AssetUpdate(SQLModel):
+    """Schema for updating an asset."""
+
+    name: str | None = None
+    file_name: str | None = None
+    asset_type: AssetType | None = None
+    caption: str | None = None
+    tags: list[str] | None = None
+    embedding_model: str | None = None
+    embedding: list[float] | None = None
