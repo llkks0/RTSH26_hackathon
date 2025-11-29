@@ -14,6 +14,7 @@ from sqlmodel import Session, SQLModel
 
 # Import models to register them with SQLModel
 from models import *  # noqa: F403
+from campaigns.models import *  # noqa: F403
 
 # Database configuration
 DATABASE_URL = os.getenv(
