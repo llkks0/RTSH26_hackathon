@@ -8,7 +8,9 @@ try:
 except ImportError:
     pass
 
-from sqlmodel import Session, SQLModel, create_engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
+from sqlmodel import Session, SQLModel
 
 # Import models to register them with SQLModel
 from models import *  # noqa: F403
@@ -19,12 +21,49 @@ DATABASE_URL = os.getenv(
     'postgresql://user:password@localhost:5432/project_database',
 )
 
+
+def ensure_database_exists() -> None:
+    """Create the database if it doesn't exist."""
+    # Parse the database URL to get connection details
+    # Format: postgresql://user:password@host:port/database
+    if 'postgresql://' not in DATABASE_URL:
+        return  # Not PostgreSQL, skip
+
+    try:
+        # Extract database name from URL
+        db_name = DATABASE_URL.split('/')[-1].split('?')[0]
+        # Create URL to connect to default 'postgres' database
+        base_url = '/'.join(DATABASE_URL.split('/')[:-1]) + '/postgres'
+
+        # Connect to postgres database to create the target database
+        temp_engine = create_engine(base_url, isolation_level='AUTOCOMMIT')
+        with temp_engine.connect() as conn:
+            # Check if database exists
+            result = conn.execute(
+                text(
+                    "SELECT 1 FROM pg_database WHERE datname = :db_name"
+                ),
+                {'db_name': db_name}
+            )
+            exists = result.fetchone() is not None
+
+            if not exists:
+                # Create the database
+                conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+        temp_engine.dispose()
+    except OperationalError:
+        # Database might already exist or connection failed
+        # Let SQLModel handle the error when trying to create tables
+        pass
+
+
 # Create engine
 engine = create_engine(DATABASE_URL, echo=True)
 
 
 def create_db_and_tables() -> None:
-    """Create database tables from SQLModel models."""
+    """Create database and tables from SQLModel models."""
+    ensure_database_exists()
     SQLModel.metadata.create_all(engine)
 
 
