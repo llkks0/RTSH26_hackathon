@@ -151,6 +151,12 @@ export type AnalyticsGoalMetric =
   | "cpc"
   | "cpa";
 
+export type AssetType =
+  | "background"
+  | "product"
+  | "model"
+  | "logo";
+
 export interface EmbeddingVector {
   // Stored as for example number[] in code, and float[] or separate table in DB
   values: number[];
@@ -162,35 +168,20 @@ export interface EmbeddingVector {
 ### 5.1 Assets
 
 ```ts
-export interface AssetType {
-  id: UUID;
-  label: string; // for example "background", "product", "model", "logo"
-  createdAt: Timestamp;
-}
-
 export interface Asset {
   id: UUID;
   name: string;        // for example "Running shoe packshot 1"
   fileName: string;    // path or URL
-  assetTypeId: UUID;   // FK -> AssetType.id
-  createdAt: Timestamp;
-}
-
-// Textual representation of the asset for embeddings
-export interface AssetCaption {
-  id: UUID;
-  assetId: UUID;       // FK -> Asset.id
+  assetType: AssetType; // enum: "background" | "product" | "model" | "logo"
+  
+  // Textual representation of the asset for embeddings (merged from AssetCaption)
   caption: string;     // short description for embedding
   tags: string[];      // optional tag list, for example ["running", "shoe", "outdoor"]
-  createdAt: Timestamp;
-}
-
-// Embedding for assets (text-based for now)
-export interface AssetEmbedding {
-  id: UUID;
-  assetId: UUID;             // FK -> Asset.id
-  model: string;             // for example "text-embedding-3-large"
-  embedding: EmbeddingVector;
+  
+  // Embedding for assets (text-based for now, merged from AssetEmbedding)
+  embeddingModel?: string;  // for example "text-embedding-3-large"
+  embedding?: EmbeddingVector;  // embedding vector (optional, may not be generated yet)
+  
   createdAt: Timestamp;
 }
 ```
@@ -388,8 +379,8 @@ Input:
 
 Output:
 
-- AssetCaption.caption
-- AssetCaption.tags
+- Asset.caption
+- Asset.tags
 
 ---
 
@@ -445,8 +436,8 @@ Output:
 ## 7. Embedding Usage
 
 - Asset embeddings
-  - AssetCaption.caption + tags are embedded via text embedding model.
-  - Stored in AssetEmbedding.
+  - Asset.caption + tags are embedded via text embedding model.
+  - Stored directly in Asset.embedding and Asset.embeddingModel.
 
 - Prompt embeddings
   - Each PromptGen step (or each prompt string) is embedded.
@@ -455,7 +446,7 @@ Output:
 - Asset selection for ImageGen
   - Given a new prompt:
     - Find its embedding.
-    - Compute cosine similarity against AssetEmbedding.
+    - Compute cosine similarity against Asset.embedding for all assets.
     - Select top K assets.
   - These assets can be:
     - Used directly in composing the generation prompt.
@@ -468,7 +459,7 @@ Output:
 1. Create:
    - Campaign "Running Shoes Launch".
    - TargetGroup "Berlin - Young Professionals".
-   - Several Assets with captions and embeddings.
+   - Several Assets (with assetType, caption, tags) and embeddings.
 
 2. CampaignFlow:
    - initialPrompt: "Generate lifestyle images of young professionals in Berlin using modern running shoes in daily life."
