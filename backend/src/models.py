@@ -2,8 +2,8 @@ import enum
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlmodel import Field, SQLModel
-from sqlmodel.orm import Relationship
+from sqlalchemy import ARRAY, Column, Float, String
+from sqlmodel import Field, Relationship, SQLModel
 
 # ---------------------------------------------------------
 # Enums
@@ -68,12 +68,10 @@ class Asset(BaseModel, table=True):
 
     # Textual representation of the asset for embeddings (merged from AssetCaption)
     caption: str  # short description for embedding
-    tags: list[str] = Field(default_factory=list, sa_column_kwargs={'type_': 'JSON'})  # e.g., ["running", "shoe", "outdoor"]
+    tags: list[str] = Field(default_factory=list, sa_column=Column(ARRAY(String)))  # e.g., ["running", "shoe", "outdoor"]
 
-    # Embedding for assets (text-based for now, merged from AssetEmbedding)
-    embedding_model: str | None = None  # e.g., "text-embedding-3-large"
     embedding: list[float] | None = Field(
-        default=None, sa_column_kwargs={'type_': 'JSON'}
+        default=None, sa_column=Column(ARRAY(Float))
     )  # embedding vector (optional, may not be generated yet)
 
 
@@ -85,7 +83,6 @@ class AssetCreate(SQLModel):
     asset_type: AssetType
     caption: str
     tags: list[str] = Field(default_factory=list)
-    embedding_model: str | None = None
     embedding: list[float] | None = None
 
 
@@ -97,7 +94,6 @@ class AssetUpdate(SQLModel):
     asset_type: AssetType | None = None
     caption: str | None = None
     tags: list[str] | None = None
-    embedding_model: str | None = None
     embedding: list[float] | None = None
 
 
@@ -201,7 +197,7 @@ class PromptEmbedding(BaseModel, table=True):
 
     step_id: UUID = Field(foreign_key='campaignstep.id', unique=True)
     model: str  # e.g., "text-embedding-3-large"
-    embedding: list[float] = Field(sa_column_kwargs={'type_': 'JSON'})  # embedding vector
+    embedding: list[float] = Field(sa_column=Column(ARRAY(Float)))  # embedding vector
 
     # Relationships
     step: CampaignStep | None = Relationship(back_populates='prompt_embedding')
@@ -217,7 +213,7 @@ class GeneratedImage(BaseModel, table=True):
 
     file_name: str = Field(index=True)  # path or URL of the generated image
     metadata_tags: list[str] | None = Field(
-        default=None, sa_column_kwargs={'type_': 'JSON'}
+        default=None, sa_column=Column(ARRAY(String))
     )  # e.g., ["warm colors", "close-up", "indoor", "person visible"]
     model_version: str | None = None  # image model version identifier
 
@@ -287,7 +283,7 @@ class AnalyticsResult(BaseModel, table=True):
 
     # LLM derived explanation and tags
     differentiation_text: str  # human readable explanation from LLM
-    differentiation_tags: list[str] = Field(default_factory=list, sa_column_kwargs={'type_': 'JSON'})  # concise tags describing what works
+    differentiation_tags: list[str] = Field(default_factory=list, sa_column=Column(ARRAY(String)))  # concise tags describing what works
 
     # Relationships
     step: CampaignStep | None = Relationship(back_populates='analytics_result')
