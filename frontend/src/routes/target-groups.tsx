@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import {
@@ -21,21 +21,17 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  useTargetGroups,
+  useCreateTargetGroup,
+  useUpdateTargetGroup,
+  useDeleteTargetGroup,
+} from '@/lib/api/hooks/useTargetGroups'
+import type { TargetGroup } from '@/lib/api/types'
 
 export const Route = createFileRoute('/target-groups')({
   component: TargetGroups,
 })
-
-interface TargetGroup {
-  id: string
-  name: string
-  city: string
-  ageGroup: string
-  economicStatus: string
-  description?: string
-}
-
-const STORAGE_KEY = 'adaptive-gen-target-groups'
 
 const GERMAN_CITIES = [
   'Berlin',
@@ -71,7 +67,11 @@ const ECONOMIC_STATUS_OPTIONS = [
 ]
 
 function TargetGroups() {
-  const [targetGroups, setTargetGroups] = useState<TargetGroup[]>([])
+  const { data: targetGroups = [], isLoading } = useTargetGroups()
+  const createTargetGroup = useCreateTargetGroup()
+  const updateTargetGroup = useUpdateTargetGroup()
+  const deleteTargetGroup = useDeleteTargetGroup()
+
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingGroup, setEditingGroup] = useState<TargetGroup | null>(null)
 
@@ -81,36 +81,6 @@ function TargetGroups() {
   const [ageGroup, setAgeGroup] = useState('')
   const [economicStatus, setEconomicStatus] = useState('')
   const [description, setDescription] = useState('')
-
-  // Load from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
-      setTargetGroups(JSON.parse(saved))
-    } else {
-      // Initialize with default target groups
-      const defaultGroups: TargetGroup[] = [
-        {
-          id: '1',
-          name: 'Berlin - Young Professionals',
-          city: 'Berlin',
-          ageGroup: '',
-          economicStatus: '',
-          description: 'Urban young professionals in Berlin',
-        },
-        {
-          id: '2',
-          name: 'Munich - Families',
-          city: 'Munich',
-          ageGroup: '',
-          economicStatus: '',
-          description: 'Families with children in Munich area',
-        },
-      ]
-      setTargetGroups(defaultGroups)
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultGroups))
-    }
-  }, [])
 
   const resetForm = () => {
     setName('')
@@ -125,9 +95,9 @@ function TargetGroups() {
     if (group) {
       setEditingGroup(group)
       setName(group.name)
-      setCity(group.city)
-      setAgeGroup(group.ageGroup)
-      setEconomicStatus(group.economicStatus)
+      setCity(group.city || '')
+      setAgeGroup(group.age_group || '')
+      setEconomicStatus(group.economic_status || '')
       setDescription(group.description || '')
     } else {
       resetForm()
@@ -140,46 +110,55 @@ function TargetGroups() {
       return
     }
 
-    let updatedGroups: TargetGroup[]
-
     if (editingGroup) {
       // Update existing group
-      updatedGroups = targetGroups.map((g) =>
-        g.id === editingGroup.id
-          ? {
-              ...g,
-              name: name.trim(),
-              city,
-              ageGroup,
-              economicStatus,
-              description: description.trim() || undefined,
-            }
-          : g
-      )
+      updateTargetGroup.mutate({
+        targetGroupId: editingGroup.id,
+        data: {
+          name: name.trim(),
+          city: city || null,
+          age_group: ageGroup || null,
+          economic_status: economicStatus || null,
+          description: description.trim() || null,
+        },
+      }, {
+        onSuccess: () => {
+          setDialogOpen(false)
+          resetForm()
+        }
+      })
     } else {
       // Create new group
-      const newGroup: TargetGroup = {
-        id: Date.now().toString(),
+      createTargetGroup.mutate({
         name: name.trim(),
-        city,
-        ageGroup,
-        economicStatus,
-        description: description.trim() || undefined,
-      }
-      updatedGroups = [...targetGroups, newGroup]
+        city: city || null,
+        age_group: ageGroup || null,
+        economic_status: economicStatus || null,
+        description: description.trim() || null,
+      }, {
+        onSuccess: () => {
+          setDialogOpen(false)
+          resetForm()
+        }
+      })
     }
-
-    setTargetGroups(updatedGroups)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedGroups))
-    setDialogOpen(false)
-    resetForm()
   }
 
   const handleDelete = (id: string) => {
-    const updatedGroups = targetGroups.filter((g) => g.id !== id)
-    setTargetGroups(updatedGroups)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedGroups))
+    if (confirm('Are you sure you want to delete this target group?')) {
+      deleteTargetGroup.mutate(id)
+    }
   }
+
+  if (isLoading) {
+    return (
+      <div className="max-w-screen-lg mx-auto">
+        <p>Loading target groups...</p>
+      </div>
+    )
+  }
+
+  const isSaving = createTargetGroup.isPending || updateTargetGroup.isPending
 
   return (
     <div className="max-w-screen-lg mx-auto space-y-6">
@@ -275,8 +254,8 @@ function TargetGroups() {
               <Button variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSave}>
-                {editingGroup ? 'Save Changes' : 'Create Target Group'}
+              <Button onClick={handleSave} disabled={isSaving}>
+                {isSaving ? 'Saving...' : editingGroup ? 'Save Changes' : 'Create Target Group'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -310,17 +289,17 @@ function TargetGroups() {
                   <div className="flex gap-4 text-sm">
                     <div>
                       <span className="text-muted-foreground">City: </span>
-                      <span className="font-medium">{group.city}</span>
+                      <span className="font-medium">{group.city || 'Any'}</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Age: </span>
-                      <span className="font-medium">{group.ageGroup || 'Any'}</span>
+                      <span className="font-medium">{group.age_group || 'Any'}</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">
                         Economic Status:{' '}
                       </span>
-                      <span className="font-medium">{group.economicStatus || 'Any'}</span>
+                      <span className="font-medium">{group.economic_status || 'Any'}</span>
                     </div>
                   </div>
                 </div>
@@ -336,6 +315,7 @@ function TargetGroups() {
                     variant="ghost"
                     size="icon"
                     onClick={() => handleDelete(group.id)}
+                    disabled={deleteTargetGroup.isPending}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

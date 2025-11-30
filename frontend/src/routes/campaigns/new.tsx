@@ -1,55 +1,27 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { useTargetGroups } from '@/lib/api/hooks/useTargetGroups'
+import { useCreateCampaignSpec } from '@/lib/api/hooks/useCampaignSpecs'
 
 export const Route = createFileRoute('/campaigns/new')({
   component: NewCampaign,
 })
 
-interface TargetGroup {
-  id: string
-  name: string
-  city?: string
-  ageGroup?: string
-  economicStatus?: string
-  description?: string
-}
-
-interface Campaign {
-  id: string
-  name: string
-  basePrompt: string
-  targetGroupIds: string[]
-  maxIterations: number
-  createdAt: string
-}
-
-const STORAGE_KEYS = {
-  CAMPAIGNS: 'adaptive-gen-campaigns',
-  TARGET_GROUPS: 'adaptive-gen-target-groups',
-}
-
 function NewCampaign() {
   const navigate = useNavigate()
-  const [targetGroups, setTargetGroups] = useState<TargetGroup[]>([])
+  const { data: targetGroups = [], isLoading } = useTargetGroups()
+  const createCampaignSpec = useCreateCampaignSpec()
 
   // Form state
   const [campaignName, setCampaignName] = useState('')
   const [basePrompt, setBasePrompt] = useState('')
   const [selectedTargetGroups, setSelectedTargetGroups] = useState<string[]>([])
   const [maxIterations, setMaxIterations] = useState('2')
-
-  // Load target groups from localStorage
-  useEffect(() => {
-    const savedTargetGroups = localStorage.getItem(STORAGE_KEYS.TARGET_GROUPS)
-    if (savedTargetGroups) {
-      setTargetGroups(JSON.parse(savedTargetGroups))
-    }
-  }, [])
 
   const toggleTargetGroup = (id: string) => {
     setSelectedTargetGroups(prev =>
@@ -64,30 +36,24 @@ function NewCampaign() {
       return
     }
 
-    const newCampaign: Campaign = {
-      id: Date.now().toString(),
+    createCampaignSpec.mutate({
       name: campaignName.trim(),
-      basePrompt: basePrompt.trim(),
-      targetGroupIds: selectedTargetGroups,
-      maxIterations: parseInt(maxIterations),
-      createdAt: new Date().toISOString(),
-    }
+      base_prompt: basePrompt.trim(),
+      target_group_ids: selectedTargetGroups,
+      max_iterations: parseInt(maxIterations),
+    }, {
+      onSuccess: () => {
+        navigate({ to: '/campaigns' })
+      }
+    })
+  }
 
-    // Load existing campaigns
-    const savedCampaigns = localStorage.getItem(STORAGE_KEYS.CAMPAIGNS)
-    const campaigns: Campaign[] = savedCampaigns
-      ? JSON.parse(savedCampaigns)
-      : []
-
-    // Add new campaign
-    const updatedCampaigns = [...campaigns, newCampaign]
-    localStorage.setItem(
-      STORAGE_KEYS.CAMPAIGNS,
-      JSON.stringify(updatedCampaigns)
+  if (isLoading) {
+    return (
+      <div className="max-w-screen-lg mx-auto">
+        <p>Loading...</p>
+      </div>
     )
-
-    // Navigate back to campaigns list
-    navigate({ to: '/campaigns' })
   }
 
   return (
@@ -186,7 +152,9 @@ function NewCampaign() {
             >
               Cancel
             </Button>
-            <Button onClick={handleCreateCampaign}>Create Campaign</Button>
+            <Button onClick={handleCreateCampaign} disabled={createCampaignSpec.isPending}>
+              {createCampaignSpec.isPending ? 'Creating...' : 'Create Campaign'}
+            </Button>
           </div>
         </div>
       </div>

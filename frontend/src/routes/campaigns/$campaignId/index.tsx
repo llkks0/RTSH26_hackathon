@@ -5,39 +5,21 @@ import { ArrowLeft, Play } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { useCampaignSpec, useUpdateCampaignSpec } from '@/lib/api/hooks/useCampaignSpecs'
+import { useTargetGroups } from '@/lib/api/hooks/useTargetGroups'
+import { useGetOrCreateCampaign } from '@/lib/api/hooks/useCampaigns'
 
 export const Route = createFileRoute('/campaigns/$campaignId/')({
   component: EditCampaign,
 })
 
-interface TargetGroup {
-  id: string
-  name: string
-  city?: string
-  ageGroup?: string
-  economicStatus?: string
-  description?: string
-}
-
-interface Campaign {
-  id: string
-  name: string
-  basePrompt: string
-  targetGroupIds: string[]
-  maxIterations: number
-  createdAt: string
-}
-
-const STORAGE_KEYS = {
-  CAMPAIGNS: 'adaptive-gen-campaigns',
-  TARGET_GROUPS: 'adaptive-gen-target-groups',
-}
-
 function EditCampaign() {
   const navigate = useNavigate()
   const { campaignId } = Route.useParams()
-  const [targetGroups, setTargetGroups] = useState<TargetGroup[]>([])
-  const [notFound, setNotFound] = useState(false)
+  const { data: campaign, isLoading: campaignLoading, isError } = useCampaignSpec(campaignId)
+  const { data: targetGroups = [], isLoading: targetGroupsLoading } = useTargetGroups()
+  const updateCampaignSpec = useUpdateCampaignSpec()
+  const getOrCreateCampaign = useGetOrCreateCampaign()
 
   // Form state
   const [campaignName, setCampaignName] = useState('')
@@ -45,31 +27,15 @@ function EditCampaign() {
   const [selectedTargetGroups, setSelectedTargetGroups] = useState<string[]>([])
   const [maxIterations, setMaxIterations] = useState('2')
 
-  // Load campaign data and target groups from localStorage
+  // Update form state when campaign data loads
   useEffect(() => {
-    const savedCampaigns = localStorage.getItem(STORAGE_KEYS.CAMPAIGNS)
-    const savedTargetGroups = localStorage.getItem(STORAGE_KEYS.TARGET_GROUPS)
-
-    if (savedTargetGroups) {
-      setTargetGroups(JSON.parse(savedTargetGroups))
+    if (campaign) {
+      setCampaignName(campaign.name)
+      setBasePrompt(campaign.base_prompt)
+      setSelectedTargetGroups(campaign.target_group_ids)
+      setMaxIterations(campaign.max_iterations.toString())
     }
-
-    if (savedCampaigns) {
-      const campaigns: Campaign[] = JSON.parse(savedCampaigns)
-      const campaign = campaigns.find((c) => c.id === campaignId)
-
-      if (campaign) {
-        setCampaignName(campaign.name)
-        setBasePrompt(campaign.basePrompt)
-        setSelectedTargetGroups(campaign.targetGroupIds || [])
-        setMaxIterations(campaign.maxIterations.toString())
-      } else {
-        setNotFound(true)
-      }
-    } else {
-      setNotFound(true)
-    }
-  }, [campaignId])
+  }, [campaign])
 
   const toggleTargetGroup = (id: string) => {
     setSelectedTargetGroups(prev =>
@@ -84,60 +50,58 @@ function EditCampaign() {
       return
     }
 
-    // Load existing campaigns
-    const savedCampaigns = localStorage.getItem(STORAGE_KEYS.CAMPAIGNS)
-    const campaigns: Campaign[] = savedCampaigns
-      ? JSON.parse(savedCampaigns)
-      : []
-
-    // Update the campaign
-    const updatedCampaigns = campaigns.map((c) =>
-      c.id === campaignId
-        ? {
-            ...c,
-            name: campaignName.trim(),
-            basePrompt: basePrompt.trim(),
-            targetGroupIds: selectedTargetGroups,
-            maxIterations: parseInt(maxIterations),
-          }
-        : c
-    )
-
-    localStorage.setItem(
-      STORAGE_KEYS.CAMPAIGNS,
-      JSON.stringify(updatedCampaigns)
-    )
-
-    // Navigate back to campaigns list
-    navigate({ to: '/campaigns' })
+    updateCampaignSpec.mutate({
+      id: campaignId,
+      data: {
+        name: campaignName.trim(),
+        base_prompt: basePrompt.trim(),
+        target_group_ids: selectedTargetGroups,
+        max_iterations: parseInt(maxIterations),
+      }
+    }, {
+      onSuccess: () => {
+        navigate({ to: '/campaigns' })
+      }
+    })
   }
 
   const handleStartCampaign = () => {
-    // Save any changes first
-    if (campaignName.trim() && basePrompt.trim() && selectedTargetGroups.length > 0) {
-      const savedCampaigns = localStorage.getItem(STORAGE_KEYS.CAMPAIGNS)
-      const campaigns: Campaign[] = savedCampaigns ? JSON.parse(savedCampaigns) : []
-
-      const updatedCampaigns = campaigns.map((c) =>
-        c.id === campaignId
-          ? {
-              ...c,
-              name: campaignName.trim(),
-              basePrompt: basePrompt.trim(),
-              targetGroupIds: selectedTargetGroups,
-              maxIterations: parseInt(maxIterations),
-            }
-          : c
-      )
-
-      localStorage.setItem(STORAGE_KEYS.CAMPAIGNS, JSON.stringify(updatedCampaigns))
+    // Save any changes first, then get or create campaign instance
+    const saveAndStart = () => {
+      getOrCreateCampaign.mutate(campaignId, {
+        onSuccess: (campaignInstance) => {
+          // Navigate to flow visualization using the campaign instance ID
+          navigate({ to: '/campaigns/$campaignId/flow', params: { campaignId: campaignInstance.id } })
+        }
+      })
     }
 
-    // Navigate to flow visualization
-    navigate({ to: '/campaigns/$campaignId/flow', params: { campaignId } })
+    if (campaignName.trim() && basePrompt.trim() && selectedTargetGroups.length > 0) {
+      updateCampaignSpec.mutate({
+        id: campaignId,
+        data: {
+          name: campaignName.trim(),
+          base_prompt: basePrompt.trim(),
+          target_group_ids: selectedTargetGroups,
+          max_iterations: parseInt(maxIterations),
+        }
+      }, {
+        onSuccess: saveAndStart
+      })
+    } else {
+      saveAndStart()
+    }
   }
 
-  if (notFound) {
+  if (campaignLoading || targetGroupsLoading) {
+    return (
+      <div className="max-w-screen-lg mx-auto">
+        <p>Loading campaign...</p>
+      </div>
+    )
+  }
+
+  if (isError || !campaign) {
     return (
       <div className="max-w-screen-lg mx-auto space-y-6">
         <div className="flex items-center gap-4">
@@ -180,9 +144,9 @@ function EditCampaign() {
             Update campaign settings and start generation
           </p>
         </div>
-        <Button onClick={handleStartCampaign}>
+        <Button onClick={handleStartCampaign} disabled={getOrCreateCampaign.isPending || updateCampaignSpec.isPending}>
           <Play className="h-4 w-4 mr-2" />
-          Start Campaign
+          {getOrCreateCampaign.isPending ? 'Starting...' : 'Start Campaign'}
         </Button>
       </div>
 
@@ -264,7 +228,9 @@ function EditCampaign() {
             >
               Cancel
             </Button>
-            <Button onClick={handleUpdateCampaign}>Save Changes</Button>
+            <Button onClick={handleUpdateCampaign} disabled={updateCampaignSpec.isPending}>
+              {updateCampaignSpec.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
           </div>
         </div>
       </div>

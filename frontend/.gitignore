@@ -1,3 +1,7 @@
 
 # TanStack Router
 src/routeTree.gen.ts
+
+.dist
+node_modules
+package-lock.json

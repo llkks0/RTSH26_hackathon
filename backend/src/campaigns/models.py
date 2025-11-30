@@ -1,4 +1,5 @@
 import enum
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -266,3 +267,133 @@ class AnalysisResultCreate(SQLModel):
     output_embedding: list[float]
     qualitative_diff: str
     diff_tags: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------
+# Full Campaign Response (Nested)
+# ---------------------------------------------------------
+
+
+class ImageMetricsResponse(SQLModel):
+    """Metrics data for a generated image."""
+
+    id: UUID
+    created_at: datetime
+    image_id: UUID
+    impressions: int
+    clicks: int
+    conversions: int
+    cost: float
+    ctr: float
+    conversion_rate: float
+    cpc: float
+    cpa: float
+
+
+class GeneratedImageResponse(SQLModel):
+    """Generated image with its metrics."""
+
+    id: UUID
+    created_at: datetime
+    generation_result_id: UUID
+    file_name: str
+    metadata_tags: list[str] | None
+    model_version: str | None
+    source_assets: list['AssetResponse']
+    metrics: ImageMetricsResponse | None
+
+
+class AssetResponse(SQLModel):
+    """Asset data for responses."""
+
+    id: UUID
+    created_at: datetime
+    name: str
+    file_name: str
+    asset_type: str
+    caption: str
+    tags: list[str]
+
+
+class GenerationResultResponse(SQLModel):
+    """Generation result with images and assets."""
+
+    id: UUID
+    created_at: datetime
+    step_id: UUID
+    prompt: str
+    prompt_notes: str | None
+    selected_assets: list[AssetResponse]
+    generated_images: list[GeneratedImageResponse]
+
+
+class AnalysisResultResponse(SQLModel):
+    """Analysis result data."""
+
+    id: UUID
+    created_at: datetime
+    step_id: UUID
+    winner_image_ids: list[UUID]
+    qualitative_diff: str
+    diff_tags: list[str]
+
+
+class FlowStepResponse(SQLModel):
+    """Flow step with generation and analysis results."""
+
+    id: UUID
+    created_at: datetime
+    flow_id: UUID
+    iteration: int
+    state: FlowStepState
+    input_insights: str | None
+    generation_result: GenerationResultResponse | None
+    analysis_result: AnalysisResultResponse | None
+
+
+class TargetGroupResponse(SQLModel):
+    """Target group data for responses."""
+
+    id: UUID
+    created_at: datetime
+    name: str
+    city: str | None
+    age_group: str | None
+    economic_status: str | None
+    description: str | None
+
+
+class CampaignFlowResponse(SQLModel):
+    """Campaign flow with target group and all steps."""
+
+    id: UUID
+    created_at: datetime
+    campaign_id: UUID
+    target_group_id: UUID
+    target_group: TargetGroupResponse | None
+    steps: list[FlowStepResponse]
+
+
+class CampaignSpecResponse(SQLModel):
+    """Campaign spec data for responses."""
+
+    id: UUID
+    created_at: datetime
+    name: str
+    base_prompt: str
+    max_iterations: int
+
+
+class CampaignFullResponse(SQLModel):
+    """Full campaign with all nested data (flows, steps, results)."""
+
+    id: UUID
+    created_at: datetime
+    campaign_spec_id: UUID
+    campaign_spec: CampaignSpecResponse | None
+    campaign_flows: list[CampaignFlowResponse]
+
+
+# Rebuild models for forward references
+GeneratedImageResponse.model_rebuild()
+GenerationResultResponse.model_rebuild()

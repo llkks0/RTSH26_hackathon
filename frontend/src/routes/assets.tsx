@@ -1,14 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
-import { Plus, Settings, Pencil, Trash2, Upload } from 'lucide-react'
+import { Plus, Pencil, Trash2, Upload } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from '@/components/ui/dialog'
 import {
@@ -20,38 +19,37 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { useAssets, useUploadAsset, useUpdateAsset, useDeleteAsset } from '@/lib/api/hooks/useAssets'
+import { apiClient } from '@/lib/api/client'
+import type { Asset, AssetType } from '@/lib/api/types'
 
 export const Route = createFileRoute('/assets')({
   component: Assets,
 })
 
-interface AssetType {
-  id: string
-  label: string
-}
-
-interface Asset {
-  id: string
-  name: string
-  fileName: string
-  fileUrl: string // base64 data URL for localStorage persistence
-  assetTypeId: string
-}
-
-const STORAGE_KEYS = {
-  ASSETS: 'adaptive-gen-assets',
-  ASSET_TYPES: 'adaptive-gen-asset-types',
-}
+const ASSET_TYPES: AssetType[] = [
+  'background',
+  'product',
+  'model',
+  'logo',
+  'slogan',
+  'tagline',
+  'headline',
+  'description',
+  'cta',
+]
 
 function Assets() {
-  const [assetTypes, setAssetTypes] = useState<AssetType[]>([])
-  const [assets, setAssets] = useState<Asset[]>([])
-  const [newTypeLabel, setNewTypeLabel] = useState('')
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editingLabel, setEditingLabel] = useState('')
+  const { data: assets = [], isLoading } = useAssets()
+  const uploadAsset = useUploadAsset()
+  const updateAsset = useUpdateAsset()
+  const deleteAsset = useDeleteAsset()
+
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
   const [assetDialogOpen, setAssetDialogOpen] = useState(false)
-  const [renameValue, setRenameValue] = useState('')
+  const [editName, setEditName] = useState('')
+  const [editCaption, setEditCaption] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -60,77 +58,9 @@ function Assets() {
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [pendingFileUrl, setPendingFileUrl] = useState<string>('')
   const [newAssetName, setNewAssetName] = useState('')
-  const [newAssetType, setNewAssetType] = useState('')
-
-  // Load from localStorage on mount
-  useEffect(() => {
-    const savedAssetTypes = localStorage.getItem(STORAGE_KEYS.ASSET_TYPES)
-    const savedAssets = localStorage.getItem(STORAGE_KEYS.ASSETS)
-
-    if (savedAssetTypes) {
-      setAssetTypes(JSON.parse(savedAssetTypes))
-    } else {
-      // Initialize with default asset types
-      const defaultTypes: AssetType[] = [
-        { id: '1', label: 'background' },
-        { id: '2', label: 'product' },
-        { id: '3', label: 'model' },
-        { id: '4', label: 'logo' },
-      ]
-      setAssetTypes(defaultTypes)
-      localStorage.setItem(STORAGE_KEYS.ASSET_TYPES, JSON.stringify(defaultTypes))
-    }
-
-    if (savedAssets) {
-      setAssets(JSON.parse(savedAssets))
-    }
-  }, [])
-
-  // Save asset types to localStorage whenever they change
-  useEffect(() => {
-    if (assetTypes.length > 0) {
-      localStorage.setItem(STORAGE_KEYS.ASSET_TYPES, JSON.stringify(assetTypes))
-    }
-  }, [assetTypes])
-
-  // Save assets to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.ASSETS, JSON.stringify(assets))
-  }, [assets])
-
-  const handleAddType = () => {
-    if (newTypeLabel.trim()) {
-      setAssetTypes([
-        ...assetTypes,
-        { id: Date.now().toString(), label: newTypeLabel.trim() },
-      ])
-      setNewTypeLabel('')
-    }
-  }
-
-  const handleEditType = (id: string) => {
-    const type = assetTypes.find((t) => t.id === id)
-    if (type) {
-      setEditingId(id)
-      setEditingLabel(type.label)
-    }
-  }
-
-  const handleSaveEdit = () => {
-    if (editingId && editingLabel.trim()) {
-      setAssetTypes(
-        assetTypes.map((t) =>
-          t.id === editingId ? { ...t, label: editingLabel.trim() } : t
-        )
-      )
-      setEditingId(null)
-      setEditingLabel('')
-    }
-  }
-
-  const handleDeleteType = (id: string) => {
-    setAssetTypes(assetTypes.filter((t) => t.id !== id))
-  }
+  const [newAssetType, setNewAssetType] = useState<AssetType | ''>('')
+  const [newAssetCaption, setNewAssetCaption] = useState('')
+  const [newAssetTags, setNewAssetTags] = useState('')
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -144,21 +74,22 @@ function Assets() {
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return
 
-    const file = files[0] // Take first file only
+    const file = files[0]
     if (file.type.startsWith('image/')) {
       try {
         const dataUrl = await fileToBase64(file)
         setPendingFile(file)
         setPendingFileUrl(dataUrl)
-        setNewAssetName(file.name.replace(/\.[^/.]+$/, '')) // Remove extension
+        setNewAssetName(file.name.replace(/\.[^/.]+$/, ''))
         setNewAssetType('')
+        setNewAssetCaption('')
+        setNewAssetTags('')
         setUploadDialogOpen(true)
       } catch (error) {
         console.error('Error reading file:', error)
       }
     }
 
-    // Clear file input
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -169,30 +100,37 @@ function Assets() {
       return
     }
 
-    const asset: Asset = {
-      id: Date.now().toString() + Math.random(),
-      name: newAssetName.trim(),
-      fileName: pendingFile.name,
-      fileUrl: pendingFileUrl, // base64 data URL
-      assetTypeId: newAssetType,
-    }
+    // Create FormData for file upload
+    const formData = new FormData()
+    formData.append('file', pendingFile)
+    formData.append('name', newAssetName.trim())
+    formData.append('asset_type', newAssetType)
+    formData.append('caption', newAssetCaption.trim() || newAssetName.trim())
 
-    setAssets([...assets, asset])
+    // Add tags as comma-separated string
+    const tags = newAssetTags.split(',').map(t => t.trim()).filter(Boolean)
+    tags.forEach(tag => formData.append('tags', tag))
 
-    // Reset dialog state
-    setPendingFile(null)
-    setPendingFileUrl('')
-    setNewAssetName('')
-    setNewAssetType('')
-    setUploadDialogOpen(false)
+    uploadAsset.mutate(formData, {
+      onSuccess: () => {
+        setPendingFile(null)
+        setPendingFileUrl('')
+        setNewAssetName('')
+        setNewAssetType('')
+        setNewAssetCaption('')
+        setNewAssetTags('')
+        setUploadDialogOpen(false)
+      }
+    })
   }
 
   const handleCancelUpload = () => {
-    // No need to revoke data URLs, they don't create memory leaks like blob URLs
     setPendingFile(null)
     setPendingFileUrl('')
     setNewAssetName('')
     setNewAssetType('')
+    setNewAssetCaption('')
+    setNewAssetTags('')
     setUploadDialogOpen(false)
   }
 
@@ -214,26 +152,43 @@ function Assets() {
 
   const handleAssetClick = (asset: Asset) => {
     setSelectedAsset(asset)
-    setRenameValue(asset.fileName)
+    setEditName(asset.name)
+    setEditCaption(asset.caption)
     setAssetDialogOpen(true)
   }
 
-  const handleRenameAsset = () => {
-    if (selectedAsset && renameValue.trim()) {
-      setAssets(
-        assets.map((a) =>
-          a.id === selectedAsset.id ? { ...a, fileName: renameValue.trim() } : a
-        )
-      )
-      setAssetDialogOpen(false)
+  const handleUpdateAsset = () => {
+    if (selectedAsset && editName.trim()) {
+      updateAsset.mutate({
+        assetId: selectedAsset.id,
+        data: {
+          name: editName.trim(),
+          caption: editCaption.trim(),
+        }
+      }, {
+        onSuccess: () => {
+          setAssetDialogOpen(false)
+        }
+      })
     }
   }
 
   const handleDeleteAsset = () => {
     if (selectedAsset) {
-      setAssets(assets.filter((a) => a.id !== selectedAsset.id))
-      setAssetDialogOpen(false)
+      deleteAsset.mutate(selectedAsset.id, {
+        onSuccess: () => {
+          setAssetDialogOpen(false)
+        }
+      })
     }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="max-w-screen-lg mx-auto">
+        <p>Loading assets...</p>
+      </div>
+    )
   }
 
   return (
@@ -246,107 +201,6 @@ function Assets() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="icon">
-                <Settings className="h-4 w-4" />
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Manage Asset Types</DialogTitle>
-                <DialogDescription>
-                  Create and manage asset type categories for your images
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                {/* Existing Asset Types */}
-                <div className="space-y-2">
-                  <Label>Current Asset Types</Label>
-                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                    {assetTypes.map((type) => (
-                      <div
-                        key={type.id}
-                        className="flex items-center gap-2 py-3 px-4 rounded-md border bg-background"
-                      >
-                        {editingId === type.id ? (
-                          <>
-                            <Input
-                              value={editingLabel}
-                              onChange={(e) => setEditingLabel(e.target.value)}
-                              className="flex-1"
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSaveEdit()
-                                if (e.key === 'Escape') {
-                                  setEditingId(null)
-                                  setEditingLabel('')
-                                }
-                              }}
-                              autoFocus
-                            />
-                            <Button
-                              size="sm"
-                              onClick={handleSaveEdit}
-                            >
-                              Save
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setEditingId(null)
-                                setEditingLabel('')
-                              }}
-                            >
-                              Cancel
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            <span className="flex-1">{type.label}</span>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => handleEditType(type.id)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => handleDeleteType(type.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Add New Type */}
-                <div className="space-y-2">
-                  <Label htmlFor="newType">Add New Asset Type</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="newType"
-                      placeholder="e.g., background, product, model"
-                      value={newTypeLabel}
-                      onChange={(e) => setNewTypeLabel(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleAddType()
-                      }}
-                    />
-                    <Button onClick={handleAddType}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
           <Button onClick={() => fileInputRef.current?.click()}>
             <Plus className="h-4 w-4 mr-2" />
             Upload Asset
@@ -361,7 +215,6 @@ function Assets() {
         </div>
       </div>
 
-      {/* Drag and Drop Area / Asset Grid */}
       <div
         className={`rounded-lg border-2 border-dashed bg-card p-12 transition-colors ${
           isDragging ? 'border-primary bg-accent' : 'border-border'
@@ -386,18 +239,16 @@ function Assets() {
                 className="group relative rounded-lg border bg-background overflow-hidden cursor-pointer hover:border-primary transition-colors"
                 onClick={() => handleAssetClick(asset)}
               >
-                <div className="aspect-square overflow-hidden">
+                <div className="aspect-square overflow-hidden bg-muted flex items-center justify-center">
                   <img
-                    src={asset.fileUrl}
-                    alt={asset.fileName}
+                    src={apiClient.getAssetFileUrl(asset.file_name)}
+                    alt={asset.name}
                     className="w-full h-full object-cover"
                   />
                 </div>
                 <div className="p-3 border-t">
                   <p className="text-sm font-medium truncate">{asset.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {assetTypes.find((t) => t.id === asset.assetTypeId)?.label || 'Unknown'}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{asset.asset_type}</p>
                 </div>
               </div>
             ))}
@@ -415,7 +266,6 @@ function Assets() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {/* Asset Preview */}
             {pendingFileUrl && (
               <div className="rounded-lg border overflow-hidden">
                 <img
@@ -426,7 +276,6 @@ function Assets() {
               </div>
             )}
 
-            {/* Asset Name */}
             <div className="space-y-2">
               <Label htmlFor="newAssetName">Asset Name</Label>
               <Input
@@ -437,29 +286,48 @@ function Assets() {
               />
             </div>
 
-            {/* Asset Type */}
             <div className="space-y-2">
               <Label htmlFor="assetType">Asset Type</Label>
-              <Select value={newAssetType} onValueChange={setNewAssetType}>
+              <Select value={newAssetType} onValueChange={(value) => setNewAssetType(value as AssetType)}>
                 <SelectTrigger id="assetType">
                   <SelectValue placeholder="Select asset type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {assetTypes.map((type) => (
-                    <SelectItem key={type.id} value={type.id}>
-                      {type.label}
+                  {ASSET_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="caption">Caption</Label>
+              <Textarea
+                id="caption"
+                placeholder="Describe this asset for AI processing"
+                value={newAssetCaption}
+                onChange={(e) => setNewAssetCaption(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="tags">Tags (comma-separated)</Label>
+              <Input
+                id="tags"
+                placeholder="e.g., red, outdoor, running"
+                value={newAssetTags}
+                onChange={(e) => setNewAssetTags(e.target.value)}
+              />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={handleCancelUpload}>
               Cancel
             </Button>
-            <Button onClick={handleSaveNewAsset}>
-              Save Asset
+            <Button onClick={handleSaveNewAsset} disabled={uploadAsset.isPending}>
+              {uploadAsset.isPending ? 'Uploading...' : 'Save Asset'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -471,42 +339,53 @@ function Assets() {
           <DialogHeader>
             <DialogTitle>Manage Asset</DialogTitle>
             <DialogDescription>
-              Rename or delete this asset
+              Update or delete this asset
             </DialogDescription>
           </DialogHeader>
           {selectedAsset && (
             <div className="space-y-4 py-4">
-              {/* Asset Preview */}
-              <div className="rounded-lg border overflow-hidden">
-                <img
-                  src={selectedAsset.fileUrl}
-                  alt={selectedAsset.fileName}
-                  className="w-full h-auto"
-                />
-              </div>
-
-              {/* Rename */}
               <div className="space-y-2">
                 <Label htmlFor="assetName">Asset Name</Label>
                 <Input
                   id="assetName"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleRenameAsset()
-                  }}
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="editCaption">Caption</Label>
+                <Textarea
+                  id="editCaption"
+                  value={editCaption}
+                  onChange={(e) => setEditCaption(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1 text-sm">
+                <p><span className="font-medium">Type:</span> {selectedAsset.asset_type}</p>
+                <p><span className="font-medium">File:</span> {selectedAsset.file_name}</p>
+                {selectedAsset.tags.length > 0 && (
+                  <p><span className="font-medium">Tags:</span> {selectedAsset.tags.join(', ')}</p>
+                )}
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="destructive" onClick={handleDeleteAsset}>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteAsset}
+              disabled={deleteAsset.isPending}
+            >
               <Trash2 className="h-4 w-4 mr-2" />
-              Delete
+              {deleteAsset.isPending ? 'Deleting...' : 'Delete'}
             </Button>
-            <Button onClick={handleRenameAsset}>
+            <Button
+              onClick={handleUpdateAsset}
+              disabled={updateAsset.isPending}
+            >
               <Pencil className="h-4 w-4 mr-2" />
-              Save Changes
+              {updateAsset.isPending ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>
         </DialogContent>

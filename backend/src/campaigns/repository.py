@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from campaigns.models import (
@@ -204,4 +205,38 @@ class CampaignRepository:
     def get_analysis_result_by_step(self, step_id: UUID) -> AnalysisResult | None:
         """Get the analysis result for a step."""
         statement = select(AnalysisResult).where(AnalysisResult.step_id == step_id)
+        return self.session.exec(statement).first()
+
+    # ---------------------------------------------------------
+    # Full Campaign (with eager loading)
+    # ---------------------------------------------------------
+
+    def get_campaign_full(self, campaign_id: UUID) -> Campaign | None:
+        """Get a campaign with all nested relationships eagerly loaded."""
+        statement = (
+            select(Campaign)
+            .where(Campaign.id == campaign_id)
+            .options(
+                selectinload(Campaign.campaign_spec),
+                selectinload(Campaign.campaign_flows)
+                .selectinload(CampaignFlow.target_group),
+                selectinload(Campaign.campaign_flows)
+                .selectinload(CampaignFlow.steps)
+                .selectinload(FlowStep.generation_result)
+                .selectinload(GenerationResult.selected_assets),
+                selectinload(Campaign.campaign_flows)
+                .selectinload(CampaignFlow.steps)
+                .selectinload(FlowStep.generation_result)
+                .selectinload(GenerationResult.generated_images)
+                .selectinload(GeneratedImage.source_assets),
+                selectinload(Campaign.campaign_flows)
+                .selectinload(CampaignFlow.steps)
+                .selectinload(FlowStep.generation_result)
+                .selectinload(GenerationResult.generated_images)
+                .selectinload(GeneratedImage.metrics),
+                selectinload(Campaign.campaign_flows)
+                .selectinload(CampaignFlow.steps)
+                .selectinload(FlowStep.analysis_result),
+            )
+        )
         return self.session.exec(statement).first()

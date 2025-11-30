@@ -89,6 +89,13 @@ class CampaignService:
         """List all campaigns."""
         return self.repository.get_campaigns(skip=skip, limit=limit)
 
+    def get_campaign_full(self, campaign_id: UUID) -> Campaign:
+        """Get a campaign with all nested relationships (flows, steps, results)."""
+        campaign = self.repository.get_campaign_full(campaign_id)
+        if not campaign:
+            raise CampaignNotFoundError(campaign_id)
+        return campaign
+
     # ---------------------------------------------------------
     # Flow Operations
     # ---------------------------------------------------------

@@ -8,6 +8,7 @@ from campaigns.models import (
     Campaign,
     CampaignCreate,
     CampaignFlow,
+    CampaignFullResponse,
     FlowStep,
     GeneratedImage,
 )
@@ -72,6 +73,22 @@ def get_campaign(
     """Get a specific campaign by ID."""
     try:
         return service.get_campaign(campaign_id)
+    except CampaignNotFoundError:
+        raise HTTPException(status_code=404, detail='Campaign not found')
+
+
+@router.get('/{campaign_id}/full', response_model=CampaignFullResponse)
+def get_campaign_full(
+    campaign_id: UUID,
+    service: CampaignService = Depends(get_campaign_service),
+) -> CampaignFullResponse:
+    """Get a campaign with all nested data (flows, steps, results).
+
+    Returns the complete campaign graph with all flows, steps, generation results,
+    analysis results, and images in a single response.
+    """
+    try:
+        return service.get_campaign_full(campaign_id)
     except CampaignNotFoundError:
         raise HTTPException(status_code=404, detail='Campaign not found')
 
