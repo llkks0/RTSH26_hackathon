@@ -28,6 +28,7 @@ Example:
 import json
 import os
 import sys
+import logging
 from typing import List, TypedDict
 
 try:
@@ -44,8 +45,13 @@ from openai import (
     RateLimitError,
 )
 
-from ..schemas import AnalyticsData, ImageData
+try:  # Allow running when steps package is imported standalone
+    from ..schemas import AnalyticsData, ImageData
+except ImportError:  # pragma: no cover - fallback for direct script usage
+    from schemas import AnalyticsData, ImageData  # type: ignore
 from .select_top_images import select_top_images
+
+logger = logging.getLogger(__name__)
 
 __all__ = ['analyze_image_differences', 'ImageAnalysisResult', 'DEFAULT_MODEL']
 
@@ -193,6 +199,12 @@ def analyze_image_differences(
             f"but only {len(analytics_list)} provided."
         )
     
+    logger.info(
+        "Analyzing %s creatives (top_n=%s) for performance differences",
+        len(analytics_list),
+        top_n,
+    )
+
     # Select top N images
     top_analytics = select_top_images(analytics_list, top_n=top_n)
     top_ids = {analytics.id for analytics in top_analytics}
@@ -244,10 +256,11 @@ def analyze_image_differences(
     # Call ChatGPT for analysis
     api_key = os.getenv('OPENAI_API_KEY')
     if not api_key:
-        print(
-            '[warn] OPENAI_API_KEY not set in environment or .env file, using fallback analysis.',
-            file=sys.stderr,
+        msg = (
+            'OPENAI_API_KEY not set in environment or .env file, using fallback analysis.'
         )
+        print(f'[warn] {msg}', file=sys.stderr)
+        logger.warning(msg)
         return {
             **FALLBACK_ANALYSIS,
             'top_image_ids': [img['id'] for img in top_images_data],
@@ -255,6 +268,12 @@ def analyze_image_differences(
         }
     
     client = OpenAI(api_key=api_key)
+    logger.info(
+        "Requesting differentiation analysis via %s (top=%s, bottom=%s)",
+        model,
+        len(top_images_data),
+        len(bottom_images_data),
+    )
     
     # Build prompt for ChatGPT
     system_prompt = (
@@ -299,10 +318,12 @@ Respond in JSON format with this structure:
             temperature=0.7,
             max_tokens=1500,
         )
-        
+
         result_text = response.choices[0].message.content.strip()
         result = json.loads(result_text)
-        
+
+        logger.info("Received differentiation analysis response")
+
         # Validate and return result
         return {
             'differentiation_text': result.get('differentiation_text', ''),
@@ -310,8 +331,9 @@ Respond in JSON format with this structure:
             'top_image_ids': [img['id'] for img in top_images_data],
             'bottom_image_ids': [img['id'] for img in bottom_images_data],
         }
-        
+
     except (RateLimitError, APIConnectionError, APIError) as e:
+        logger.warning("OpenAI API error (%s): %s", type(e).__name__, e)
         print(
             f'[warn] OpenAI API error ({type(e).__name__}): {e}. Using fallback analysis.',
             file=sys.stderr,
@@ -321,8 +343,9 @@ Respond in JSON format with this structure:
             'top_image_ids': [img['id'] for img in top_images_data],
             'bottom_image_ids': [img['id'] for img in bottom_images_data],
         }
-    
+
     except json.JSONDecodeError as e:
+        logger.warning("Failed to parse ChatGPT response JSON: %s", e)
         print(
             f'[warn] Failed to parse ChatGPT response as JSON: {e}. Using fallback analysis.',
             file=sys.stderr,
@@ -332,8 +355,9 @@ Respond in JSON format with this structure:
             'top_image_ids': [img['id'] for img in top_images_data],
             'bottom_image_ids': [img['id'] for img in bottom_images_data],
         }
-    
+
     except Exception as e:
+        logger.warning("Unexpected error during analysis: %s", e)
         print(
             f'[warn] Unexpected error during analysis: {e}. Using fallback analysis.',
             file=sys.stderr,

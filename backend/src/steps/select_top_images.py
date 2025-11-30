@@ -1,6 +1,13 @@
+import logging
 from typing import List
 
-from ..schemas import AnalyticsData, ImageData
+try:
+    from ..schemas import AnalyticsData, ImageData
+except ImportError:  # pragma: no cover
+    from schemas import AnalyticsData, ImageData  # type: ignore
+
+
+logger = logging.getLogger(__name__)
 
 
 def select_top_images(
@@ -42,6 +49,7 @@ def select_top_images(
         )
     
     # Calculate composite score for each image
+    logger.info("Scoring %s images to select top %s", len(analytics_list), top_n)
     scored_images = []
     
     for analytics in analytics_list:
@@ -83,6 +91,7 @@ def select_top_images(
     scored_images.sort(key=lambda x: x[0], reverse=True)
     
     top_images = [analytics for _, analytics in scored_images[:top_n]]
+    logger.info("Selected top image IDs: %s", [a.id for a in top_images])
     
     return top_images
 

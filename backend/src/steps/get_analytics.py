@@ -1,7 +1,14 @@
+import logging
 import random
 from typing import List
 
-from ..schemas import AnalyticsData, ImageData
+try:
+    from ..schemas import AnalyticsData, ImageData
+except ImportError:  # pragma: no cover - fallback for script execution
+    from schemas import AnalyticsData, ImageData  # type: ignore
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_analytics(image_ids: List[ImageData]) -> List[AnalyticsData]:
@@ -17,6 +24,7 @@ def get_analytics(image_ids: List[ImageData]) -> List[AnalyticsData]:
         List[AnalyticsData]: A list of analytics data models per image.
     """
 
+    logger.info("Generating mock analytics for %s images", len(image_ids))
     analytics_results = []
 
     for img_data in image_ids:
@@ -38,22 +46,28 @@ def get_analytics(image_ids: List[ImageData]) -> List[AnalyticsData]:
         value_per_conversion = round(random.uniform(25.0, 60.0), 2)
         conversion_value = round(conversions * value_per_conversion, 2)
 
-        analytics_results.append(
-            AnalyticsData(
-                id=img_id,
-                impressions=impressions,
-                clicks=clicks,
-                ctr=ctr,
-                interactions=interactions,
-                interaction_rate=interaction_rate,
-                conversions=conversions,
-                conversion_rate=conversion_rate,
-                cost=cost,
-                avg_cpc=avg_cpc,
-                cpm=cpm,
-                conversion_value=conversion_value,
-                value_per_conversion=value_per_conversion,
-            )
+        record = AnalyticsData(
+            id=img_id,
+            impressions=impressions,
+            clicks=clicks,
+            ctr=ctr,
+            interactions=interactions,
+            interaction_rate=interaction_rate,
+            conversions=conversions,
+            conversion_rate=conversion_rate,
+            cost=cost,
+            avg_cpc=avg_cpc,
+            cpm=cpm,
+            conversion_value=conversion_value,
+            value_per_conversion=value_per_conversion,
+        )
+        analytics_results.append(record)
+        logger.debug(
+            "Analytics for %s: ctr=%.3f, conv_rate=%.3f, value=%.2f",
+            img_id,
+            ctr,
+            conversion_rate,
+            conversion_value,
         )
 
     return analytics_results

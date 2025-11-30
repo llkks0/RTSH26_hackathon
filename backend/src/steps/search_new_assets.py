@@ -1,14 +1,22 @@
+import logging
 import math
 from typing import List
 from uuid import UUID
 
 from sqlmodel import Session, select
 
-from ..assets.create_embedding import create_embedding
-from ..models import Asset, AssetType
+try:
+    from ..assets.create_embedding import create_embedding
+    from ..models import Asset, AssetType
+except ImportError:  # pragma: no cover - fallback for standalone scripts
+    from assets.create_embedding import create_embedding  # type: ignore
+    from models import Asset, AssetType  # type: ignore
 
 DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small'
 DEFAULT_TOP_K = 5
+
+
+logger = logging.getLogger(__name__)
 
 
 def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
@@ -86,11 +94,16 @@ def search_new_assets(
     assets = list(session.exec(statement).all())
     
     if not assets:
+        logger.info("No assets with embeddings available for search")
         return []
     
     # Compute similarity scores
     scored_assets: List[tuple[Asset, float]] = []
     
+    logger.info(
+        "Computing similarity against %s assets (top_k=%s)", len(assets), top_k
+    )
+
     for asset in assets:
         # Double-check embedding exists (defensive programming)
         if asset.embedding is None or len(asset.embedding) == 0:
@@ -101,16 +114,19 @@ def search_new_assets(
             scored_assets.append((asset, similarity))
         except ValueError as e:
             # Skip assets with incompatible embedding dimensions
-            print(
-                f"[warn] Skipping asset {asset.id}: embedding dimension mismatch: {e}",
-                file=__import__('sys').stderr,
+            logger.warning(
+                "Skipping asset %s due to embedding dimension mismatch: %s",
+                asset.id,
+                e,
             )
             continue
     
     # Sort by similarity (highest first) and return top K
     scored_assets.sort(key=lambda x: x[1], reverse=True)
     
-    return scored_assets[:top_k]
+    results = scored_assets[:top_k]
+    logger.info("Returning %s similar assets", len(results))
+    return results
 
 
 def search_new_assets_by_ids(
@@ -142,7 +158,10 @@ def search_new_assets_by_ids(
 
 if __name__ == "__main__":
     # Test mode
-    from ..database import engine
+    try:
+        from ..database import engine
+    except ImportError:  # pragma: no cover
+        from database import engine  # type: ignore
     from sqlmodel import Session
     
     # Example usage

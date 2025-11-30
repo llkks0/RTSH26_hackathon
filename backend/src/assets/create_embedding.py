@@ -8,6 +8,7 @@ If the OpenAI call fails (quota/network/etc.), use a fallback embedding instead.
 
 import argparse
 import json
+import logging
 import os
 import sys
 
@@ -26,6 +27,9 @@ FALLBACK_DIM = 1536
 
 # Fallback embedding: simple zero vector
 FALLBACK_EMBEDDING = [0.0] * FALLBACK_DIM
+
+
+logger = logging.getLogger(__name__)
 
 
 def create_embedding(text: str, model: str) -> list[float]:
@@ -58,6 +62,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO)
     args = parse_args()
     text = args.description.strip()
     if not text:
@@ -67,6 +72,7 @@ def main() -> None:
     try:
         embedding = create_embedding(text, args.model)
         used_fallback = False
+        logger.info("Created embedding using %s", args.model)
     except (RateLimitError, APIConnectionError, APIError) as exc:
         # Same idea as description.py: log and fall back
         print(
@@ -75,6 +81,7 @@ def main() -> None:
         )
         embedding = FALLBACK_EMBEDDING
         used_fallback = True
+        logger.warning("OpenAI embedding error (%s): %s", type(exc).__name__, exc)
     except (RuntimeError, ValueError) as exc:
         # These are our own validation/env errors – still fatal
         print(f'[error] Failed to create embedding: {exc}', file=sys.stderr)

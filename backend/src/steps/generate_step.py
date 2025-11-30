@@ -2,15 +2,19 @@ import os
 import time
 import random
 import base64
+import logging
 import requests
 from pathlib import Path
-from typing import Dict, List, Any, Tuple, Optional
+from typing import Dict, List, Any, Tuple, Optional, Set
 
 
 BFL_API_KEY = os.environ.get("BFL_API_KEY")
 FLUX_ENDPOINT = "https://api.bfl.ai/v1/flux-2-pro"
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tiff"}
+
+
+logger = logging.getLogger(__name__)
 
 
 class FluxGenerationError(Exception):
@@ -90,6 +94,7 @@ def call_flux_edit(
         for idx, ref_b64 in enumerate(reference_images_b64[:7], start=2):
             payload[f"input_image_{idx}"] = ref_b64
 
+    logger.debug("Submitting FLUX edit request with prompt length %s", len(prompt))
     response = requests.post(
         FLUX_ENDPOINT,
         headers={
@@ -252,6 +257,7 @@ def load_assets_from_folder(base_dir: str) -> Dict[str, List[Dict[str, Any]]]:
 def select_assets_for_image(
     assets: Dict[str, List[Dict[str, Any]]],
     used_ids_per_class: Dict[str, set],
+    allowed_ids_per_class: Optional[Dict[str, Set[str]]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """
     For each asset class (e.g. 'jackets', 'pants', 'models'), choose one asset.
@@ -265,6 +271,10 @@ def select_assets_for_image(
         Mapping of asset_class -> list of asset dicts (as returned by load_assets_from_folder).
     used_ids_per_class : dict
         Mutable mapping of asset_class -> set of already-used asset IDs.
+    allowed_ids_per_class : dict, optional
+        Optional mapping of asset_class -> set of asset IDs to prioritize. If
+        provided, selection attempts to pull from this subset first while still
+        falling back to the broader class list when needed.
 
     Returns
     -------
@@ -278,7 +288,15 @@ def select_assets_for_image(
             continue
 
         used_ids = used_ids_per_class.setdefault(asset_class, set())
+        allowed_ids = None
+        if allowed_ids_per_class:
+            allowed_ids = allowed_ids_per_class.get(asset_class)
+
         available = [a for a in items if a.get("id") not in used_ids]
+        if allowed_ids:
+            filtered = [a for a in available if a.get("id") in allowed_ids]
+            if filtered:
+                available = filtered
 
         if not available:
             # Reset and allow reuse once all have been used
@@ -288,6 +306,7 @@ def select_assets_for_image(
         chosen = random.choice(available)
         selection[asset_class] = chosen
         used_ids.add(chosen.get("id"))
+        logger.debug("Selected %s asset '%s'", asset_class, chosen.get("id"))
 
     return selection
 
@@ -383,66 +402,74 @@ def build_prompt(
     return f"{base}{detail}{refs_text}"
 
 
-def generate_images_for_targets(
-    base_prompt: str,
-    target_groups: List[str],
-    assets: Dict[str, List[Dict[str, Any]]],
-    num_images_per_group: int = 5,
-    width: int = 1024,
-    height: int = 1024,
-) -> Dict[str, List[Dict[str, Any]]]:
-    """
-    Generate edited images for multiple target groups using FLUX.2.
+class FluxBatchSession:
+    """Stateful helper that keeps asset metadata and usage tracking."""
 
-    IMPORTANT: The target group is NOT injected into the prompt. It is only kept
-    as metadata in the returned structure so the caller can decide where to use
-    each image.
+    def __init__(self, assets_base_dir: str):
+        self.assets = load_assets_from_folder(assets_base_dir)
+        self.used_ids_per_class: Dict[str, Set[str]] = {}
 
-    Parameters
-    ----------
-    base_prompt : str
-        Base prompt text describing overall style/look of the output.
-    target_groups : list of str
-        List of logical group labels (e.g. "Gen Z streetwear") used only as metadata.
-    assets : dict
-        Mapping of asset_class -> list of asset dicts (from load_assets_from_folder).
-    num_images_per_group : int, optional
-        Number of edited images to generate per target group. Default is 5.
-    width : int, optional
-        Output width in pixels. Default is 1024.
-    height : int, optional
-        Output height in pixels. Default is 1024.
+    def generate_images_for_group(
+        self,
+        base_prompt: str,
+        target_group: str,
+        num_images: int = 5,
+        width: int = 1024,
+        height: int = 1024,
+        preferred_asset_ids: Optional[Dict[str, Set[str]]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate edited images for a single target group using FLUX.2.
 
-    Returns
-    -------
-    dict
-        Mapping target_group -> list of image result dicts. Each image dict has:
-        - 'prompt': str, the exact prompt used
-        - 'target_group': str, the group label (metadata only)
-        - 'assets': dict, asset_class -> asset dict used for this image
-        - 'base_class': str, which asset class was used as base input image
-        - 'image_url': str or None, URL of the generated image (result['result']['sample'])
-        - 'request_id': str, FLUX.2 request ID
-        - 'cost': float or None, credits charged for the request (if returned)
+        IMPORTANT: The target group is NOT injected into the prompt. It is kept
+        only as metadata in the returned structures so the caller can leverage it.
 
-    Raises
-    ------
-    FluxGenerationError
-        If any FLUX.2 call fails.
-    """
-    results: Dict[str, List[Dict[str, Any]]] = {}
-    used_ids_per_class: Dict[str, set] = {}
+        Parameters
+        ----------
+        base_prompt : str
+            Base prompt text describing overall style/look of the output.
+        target_group : str
+            Logical group label (e.g. "Gen Z streetwear") stored as metadata only.
+        num_images : int, optional
+            Number of edited images to generate for this target group. Default is 5.
+        width : int, optional
+            Output width in pixels. Default is 1024.
+        height : int, optional
+            Output height in pixels. Default is 1024.
 
-    for target_group in target_groups:
+        Returns
+        -------
+        list
+            List of image result dicts. Each dict has the following keys:
+            - 'prompt': str, the exact prompt used
+            - 'target_group': str, the group label (metadata only)
+            - 'assets': dict, asset_class -> asset dict used for this image
+            - 'base_class': str, which asset class was used as base input image
+            - 'image_url': str or None, URL of the generated image
+            - 'request_id': str, FLUX.2 request ID
+            - 'cost': float or None, credits charged for the request (if available)
+
+        Raises
+        ------
+        FluxGenerationError
+            If any FLUX.2 call fails.
+        """
         group_results: List[Dict[str, Any]] = []
 
-        for _ in range(num_images_per_group):
-            selected_assets = select_assets_for_image(assets, used_ids_per_class)
+        logger.info(
+            "Generating %s images for %s", num_images, target_group
+        )
+
+        for idx in range(num_images):
+            selected_assets = select_assets_for_image(
+                self.assets,
+                self.used_ids_per_class,
+                allowed_ids_per_class=preferred_asset_ids,
+            )
             (base_class, base_asset), reference_assets = choose_base_and_references(
                 selected_assets
             )
 
-            # Encode base + references as base64
             base_b64 = encode_image_to_base64(base_asset["file_path"])
             refs_b64 = [
                 encode_image_to_base64(a["file_path"]) for _, a in reference_assets
@@ -454,7 +481,6 @@ def generate_images_for_targets(
                 base_asset_class=base_class,
             )
 
-            # 1) Kick off editing request
             initial = call_flux_edit(
                 prompt=prompt,
                 input_image_b64=base_b64,
@@ -472,14 +498,13 @@ def generate_images_for_targets(
                     f"No polling_url in response for request {request_id}"
                 )
 
-            # 2) Poll for the final image URL
             final = poll_flux_result(polling_url=polling_url, request_id=request_id)
             sample_url = final.get("result", {}).get("sample")
 
             group_results.append(
                 {
                     "prompt": prompt,
-                    "target_group": target_group,  # metadata only
+                    "target_group": target_group,
                     "assets": selected_assets,
                     "base_class": base_class,
                     "image_url": sample_url,
@@ -487,10 +512,15 @@ def generate_images_for_targets(
                     "cost": cost,
                 }
             )
+            logger.info(
+                "[%s] Generated image %s/%s (request %s)",
+                target_group,
+                idx + 1,
+                num_images,
+                request_id,
+            )
 
-        results[target_group] = group_results
-
-    return results
+        return group_results
 
 
 def print_concise_summary(results: Dict[str, List[Dict[str, Any]]]) -> None:
@@ -501,7 +531,7 @@ def print_concise_summary(results: Dict[str, List[Dict[str, Any]]]) -> None:
     ----------
     results : dict
         Mapping target_group -> list of image result dicts,
-        as returned by generate_images_for_targets or run_flux_batch_edit.
+        as returned by FluxBatchSession.generate_images_for_group.
     """
     for target_group, images in results.items():
         print(f"\n=== Target group: {target_group} ===")
@@ -518,87 +548,6 @@ def print_concise_summary(results: Dict[str, List[Dict[str, Any]]]) -> None:
             print(
                 f"  [{idx}] URL={img['image_url']} | assets: {assets_str}{cost_str}"
             )
-
-
-def run_flux_batch_edit(
-    assets_base_dir: str,
-    base_prompt: str,
-    target_groups: List[str],
-    num_images_per_group: int = 5,
-    width: int = 1024,
-    height: int = 1024,
-    print_summary: bool = False,
-) -> Dict[str, List[Dict[str, Any]]]:
-    """
-    High-level entrypoint for batch editing with FLUX.2.
-
-    This is the main function you can import and call from your application.
-
-    Workflow
-    --------
-    1. Scans `assets_base_dir` for asset classes and image files.
-    2. For each target group:
-       - Randomly picks one asset per class (with rotation).
-       - Uses one asset as the base input image.
-       - Uses the other assets as reference images.
-       - Calls FLUX.2 image editing to generate `num_images_per_group` images.
-    3. Returns full metadata for all generated images.
-
-    Parameters
-    ----------
-    assets_base_dir : str
-        Path to the base assets directory (with subfolders per asset class).
-    base_prompt : str
-        Base prompt text describing overall style/look of the output.
-    target_groups : list of str
-        Labels for logical groups (not injected into the prompt text).
-    num_images_per_group : int, optional
-        Number of images to generate per target group. Default is 5.
-    width : int, optional
-        Output image width in pixels. Default is 1024.
-    height : int, optional
-        Output image height in pixels. Default is 1024.
-    print_summary : bool, optional
-        If True, prints a concise summary to stdout. Default is False.
-
-    Returns
-    -------
-    dict
-        Mapping target_group -> list of image result dicts:
-        [
-          {
-            "prompt": str,
-            "target_group": str,
-            "assets": {asset_class: asset_dict, ...},
-            "base_class": str,
-            "image_url": str or None,
-            "request_id": str,
-            "cost": float or None,
-          },
-          ...
-        ]
-
-    Raises
-    ------
-    ValueError
-        If assets_base_dir is invalid or contains no assets.
-    FluxGenerationError
-        If any FLUX.2 API call fails.
-    """
-    assets = load_assets_from_folder(assets_base_dir)
-    results = generate_images_for_targets(
-        base_prompt=base_prompt,
-        target_groups=target_groups,
-        assets=assets,
-        num_images_per_group=num_images_per_group,
-        width=width,
-        height=height,
-    )
-
-    if print_summary:
-        print_concise_summary(results)
-
-    return results
 
 
 if __name__ == "__main__":
@@ -623,14 +572,18 @@ if __name__ == "__main__":
     ]
 
     try:
-        run_flux_batch_edit(
-            assets_base_dir=ASSETS_BASE_DIR,
-            base_prompt=base_prompt,
-            target_groups=target_groups,
-            num_images_per_group=5,
-            width=1024,
-            height=1024,
-            print_summary=True,
-        )
+        session = FluxBatchSession(assets_base_dir=ASSETS_BASE_DIR)
+        all_results: Dict[str, List[Dict[str, Any]]] = {}
+
+        for group in target_groups:
+            all_results[group] = session.generate_images_for_group(
+                base_prompt=base_prompt,
+                target_group=group,
+                num_images=5,
+                width=1024,
+                height=1024,
+            )
+
+        print_concise_summary(all_results)
     except Exception as e:
         print(f"Error: {e}")

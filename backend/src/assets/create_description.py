@@ -11,6 +11,7 @@ prewritten fallback description instead of crashing.
 
 import argparse
 import base64
+import logging
 import os
 import sys
 from pathlib import Path
@@ -30,6 +31,9 @@ FALLBACK_DESCRIPTION = (
     'generated because the AI service was unavailable. Please try again later '
     'or check your OpenAI connection and quota.'
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def encode_image_to_base64(image_path: str) -> str:
@@ -54,10 +58,9 @@ def describe_image(
     """
     if 'OPENAI_API_KEY' not in os.environ:
         # No key at all – just return fallback
-        print(
-            '[warn] OPENAI_API_KEY not set, using fallback description.',
-            file=sys.stderr,
-        )
+        msg = 'OPENAI_API_KEY not set, using fallback description.'
+        print(f'[warn] {msg}', file=sys.stderr)
+        logger.warning(msg)
         return fallback_description
 
     client = OpenAI()  # uses OPENAI_API_KEY
@@ -102,7 +105,9 @@ def describe_image(
             messages=messages,
             max_tokens=max_tokens,
         )
-        return response.choices[0].message.content.strip()
+        description = response.choices[0].message.content.strip()
+        logger.info("Generated description for %s", image_path)
+        return description
 
     except (RateLimitError, APIConnectionError, APIError) as e:
         # Known OpenAI / network / quota problems
@@ -110,6 +115,7 @@ def describe_image(
             f'[warn] OpenAI API error ({type(e).__name__}): {e}. Using fallback description.',
             file=sys.stderr,
         )
+        logger.warning("OpenAI description error (%s): %s", type(e).__name__, e)
         return fallback_description
 
     except Exception as e:
@@ -118,6 +124,7 @@ def describe_image(
             f'[warn] Unexpected error while describing image: {e}. Using fallback description.',
             file=sys.stderr,
         )
+        logger.warning("Unexpected error while describing %s: %s", image_path, e)
         return fallback_description
 
 
@@ -144,6 +151,7 @@ def parse_args():
 
 
 def main():
+    logging.basicConfig(level=logging.INFO)
     args = parse_args()
     description = describe_image(
         image_path=args.image_path,
