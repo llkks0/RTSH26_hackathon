@@ -1,12 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { CampaignFlow } from '@/components/campaign-flow/CampaignFlow'
+import {createFileRoute} from '@tanstack/react-router'
+import {CampaignGraph} from "@/components/campaign-graph/CampaignGraph.tsx";
 
 export const Route = createFileRoute('/campaigns/$campaignId/flow')({
-  component: CampaignFlowPage,
+    component: CampaignFlowPage,
 })
 
 function CampaignFlowPage() {
-  const { campaignId } = Route.useParams()
+    const {campaignId} = Route.useParams()
 
-  return <CampaignFlow campaignId={campaignId} />
+    return <CampaignGraph campaignId={campaignId}/>
 }
