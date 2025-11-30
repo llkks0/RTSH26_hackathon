@@ -1,7 +1,15 @@
+import logging
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlmodel import Session
+
+logger = logging.getLogger(__name__)
+
+# Directory where generated images are stored
+GENERATED_IMAGES_DIR = Path(__file__).parent.parent.parent / "generated-images"
 
 from campaign_specs.repository import CampaignSpecRepository
 from campaigns.models import (
@@ -9,11 +17,13 @@ from campaigns.models import (
     CampaignCreate,
     CampaignFlow,
     CampaignFullResponse,
+    CampaignResponse,
     FlowStep,
     GeneratedImage,
 )
 from campaigns.repository import CampaignRepository
 from campaigns.service import (
+    CampaignAlreadyExistsError,
     CampaignNotFoundError,
     CampaignService,
     FlowNotFoundError,
@@ -38,41 +48,93 @@ def get_campaign_spec_repository(
 
 
 # ---------------------------------------------------------
+# Generated Image File Endpoints (must be before /{campaign_id} routes)
+# ---------------------------------------------------------
+
+
+@router.get('/generated-images/{filename}')
+def get_generated_image_file(filename: str) -> FileResponse:
+    """Serve a generated image file."""
+    file_path = GENERATED_IMAGES_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f'Image file not found: {file_path}')
+    return FileResponse(file_path)
+
+
+# ---------------------------------------------------------
 # Campaign Endpoints
 # ---------------------------------------------------------
 
 
-@router.post('/', response_model=Campaign, status_code=201)
+@router.post('/', response_model=CampaignResponse, status_code=201)
 def create_campaign(
     data: CampaignCreate,
     service: CampaignService = Depends(get_campaign_service),
     spec_repo: CampaignSpecRepository = Depends(get_campaign_spec_repository),
-) -> Campaign:
+) -> CampaignResponse:
     """Create a new campaign from a campaign spec."""
+    logger.info(f"Creating campaign from spec_id: {data.campaign_spec_id}")
     spec = spec_repo.get_by_id(data.campaign_spec_id)
     if not spec:
+        logger.error(f"Campaign spec not found: {data.campaign_spec_id}")
         raise HTTPException(status_code=404, detail='Campaign spec not found')
-    return service.create_campaign(data, spec)
+
+    logger.info(f"Found spec: {spec.id} ({spec.name})")
+    logger.info(f"Spec has {len(spec.target_groups) if spec.target_groups else 0} target groups")
+    logger.info(f"Spec has {len(spec.base_assets) if spec.base_assets else 0} base assets")
+
+    if spec.target_groups:
+        for tg in spec.target_groups:
+            logger.info(f"  - Target group: {tg.id} ({tg.name})")
+    else:
+        logger.warning("No target groups found on spec!")
+
+    try:
+        campaign = service.create_campaign(data, spec)
+    except CampaignAlreadyExistsError:
+        raise HTTPException(
+            status_code=409,
+            detail='A campaign already exists for this campaign spec',
+        )
+
+    return CampaignResponse(
+        id=campaign.id,
+        created_at=campaign.created_at,
+        campaign_spec_id=campaign.campaign_spec_id,
+    )
 
 
-@router.get('/', response_model=list[Campaign])
+@router.get('/', response_model=list[CampaignResponse])
 def list_campaigns(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=1000),
     service: CampaignService = Depends(get_campaign_service),
-) -> list[Campaign]:
+) -> list[CampaignResponse]:
     """Get all campaigns with pagination."""
-    return service.list_campaigns(skip=skip, limit=limit)
+    campaigns = service.list_campaigns(skip=skip, limit=limit)
+    return [
+        CampaignResponse(
+            id=c.id,
+            created_at=c.created_at,
+            campaign_spec_id=c.campaign_spec_id,
+        )
+        for c in campaigns
+    ]
 
 
-@router.get('/{campaign_id}', response_model=Campaign)
+@router.get('/{campaign_id}', response_model=CampaignResponse)
 def get_campaign(
     campaign_id: UUID,
     service: CampaignService = Depends(get_campaign_service),
-) -> Campaign:
+) -> CampaignResponse:
     """Get a specific campaign by ID."""
     try:
-        return service.get_campaign(campaign_id)
+        campaign = service.get_campaign(campaign_id)
+        return CampaignResponse(
+            id=campaign.id,
+            created_at=campaign.created_at,
+            campaign_spec_id=campaign.campaign_spec_id,
+        )
     except CampaignNotFoundError:
         raise HTTPException(status_code=404, detail='Campaign not found')
 

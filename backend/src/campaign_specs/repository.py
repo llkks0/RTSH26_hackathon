@@ -1,5 +1,7 @@
+import logging
 from uuid import UUID
 
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from models import (
@@ -9,6 +11,8 @@ from models import (
     CampaignSpecTargetGroup,
     TargetGroup,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class CampaignSpecRepository:
@@ -25,12 +29,47 @@ class CampaignSpecRepository:
         return campaign_spec
 
     def get_by_id(self, campaign_spec_id: UUID) -> CampaignSpec | None:
-        """Get a campaign spec by its ID."""
-        return self.session.get(CampaignSpec, campaign_spec_id)
+        """Get a campaign spec by its ID with relationships loaded."""
+        logger.info(f"Fetching campaign spec: {campaign_spec_id}")
+        statement = (
+            select(CampaignSpec)
+            .where(CampaignSpec.id == campaign_spec_id)
+            .options(
+                selectinload(CampaignSpec.target_groups),
+                selectinload(CampaignSpec.base_assets),
+            )
+        )
+        spec = self.session.exec(statement).first()
+
+        if spec:
+            logger.info(f"Found spec: {spec.id} ({spec.name})")
+            logger.info(f"  target_groups: {spec.target_groups}")
+            logger.info(f"  base_assets: {spec.base_assets}")
+
+            # Also check link table directly
+            link_statement = select(CampaignSpecTargetGroup).where(
+                CampaignSpecTargetGroup.campaign_spec_id == campaign_spec_id
+            )
+            links = list(self.session.exec(link_statement).all())
+            logger.info(f"  Direct link table query found {len(links)} links")
+            for link in links:
+                logger.info(f"    - link: spec={link.campaign_spec_id}, tg={link.target_group_id}")
+        else:
+            logger.warning(f"Campaign spec not found: {campaign_spec_id}")
+
+        return spec
 
     def get_all(self, skip: int = 0, limit: int = 100) -> list[CampaignSpec]:
         """Get all campaign specs with pagination."""
-        statement = select(CampaignSpec).offset(skip).limit(limit)
+        statement = (
+            select(CampaignSpec)
+            .options(
+                selectinload(CampaignSpec.target_groups),
+                selectinload(CampaignSpec.base_assets),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
         return list(self.session.exec(statement).all())
 
     def update(self, campaign_spec: CampaignSpec) -> CampaignSpec:

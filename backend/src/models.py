@@ -166,11 +166,12 @@ class CampaignSpec(BaseModel, CampaignSpecBase, table=True):
 
 
 class CampaignSpecResponse(CampaignSpecBase):
-    """Response model for CampaignSpec with target_group_ids."""
+    """Response model for CampaignSpec with target_group_ids and asset_ids."""
 
     id: UUID
     created_at: datetime
     target_group_ids: list[UUID] = Field(default_factory=list)
+    asset_ids: list[UUID] = Field(default_factory=list)
 
     @classmethod
     def from_campaign_spec(cls, spec: CampaignSpec) -> 'CampaignSpecResponse':
@@ -182,6 +183,7 @@ class CampaignSpecResponse(CampaignSpecBase):
             base_prompt=spec.base_prompt,
             max_iterations=spec.max_iterations,
             target_group_ids=[tg.id for tg in spec.target_groups],
+            asset_ids=[asset.id for asset in spec.base_assets],
         )
 
 
@@ -189,6 +191,7 @@ class CampaignSpecCreate(CampaignSpecBase):
     """Schema for creating a campaign spec."""
 
     target_group_ids: list[UUID] = Field(default_factory=list)
+    asset_ids: list[UUID] = Field(default_factory=list)
 
 
 class CampaignSpecUpdate(SQLModel):
@@ -198,3 +201,4 @@ class CampaignSpecUpdate(SQLModel):
     base_prompt: str | None = None
     max_iterations: int | None = None
     target_group_ids: list[UUID] | None = None
+    asset_ids: list[UUID] | None = None

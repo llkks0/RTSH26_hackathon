@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from campaigns.models import (
@@ -19,6 +20,8 @@ from campaigns.models import (
 from campaigns.repository import CampaignRepository
 from models import CampaignSpec
 
+logger = logging.getLogger(__name__)
+
 
 class CampaignNotFoundError(Exception):
     """Raised when a campaign is not found."""
@@ -26,6 +29,14 @@ class CampaignNotFoundError(Exception):
     def __init__(self, campaign_id: UUID) -> None:
         self.campaign_id = campaign_id
         super().__init__(f'Campaign with id {campaign_id} not found')
+
+
+class CampaignAlreadyExistsError(Exception):
+    """Raised when attempting to create a campaign for a spec that already has one."""
+
+    def __init__(self, campaign_spec_id: UUID) -> None:
+        self.campaign_spec_id = campaign_spec_id
+        super().__init__(f'A campaign already exists for campaign spec {campaign_spec_id}')
 
 
 class FlowNotFoundError(Exception):
@@ -65,17 +76,37 @@ class CampaignService:
 
     def create_campaign(self, data: CampaignCreate, spec: CampaignSpec) -> Campaign:
         """Create a new campaign from a spec and initialize flows for each target group."""
+        logger.info(f"Creating campaign from spec: {spec.id} ({spec.name})")
+
+        # Check if a campaign already exists for this spec
+        existing_campaigns = self.repository.get_campaigns_by_spec(data.campaign_spec_id)
+        if existing_campaigns:
+            logger.warning(f"Campaign already exists for spec {data.campaign_spec_id}")
+            raise CampaignAlreadyExistsError(data.campaign_spec_id)
+
+        logger.info(f"Spec base_prompt: {spec.base_prompt[:50]}...")
+        logger.info(f"Spec target_groups attribute: {spec.target_groups}")
+        logger.info(f"Spec target_groups type: {type(spec.target_groups)}")
+        logger.info(f"Spec target_groups len: {len(spec.target_groups) if spec.target_groups else 'None'}")
+
         campaign = Campaign(campaign_spec_id=data.campaign_spec_id)
         campaign = self.repository.create_campaign(campaign)
+        logger.info(f"Created campaign: {campaign.id}")
 
         # Create a flow for each target group in the spec
+        flow_count = 0
         for target_group in spec.target_groups:
+            logger.info(f"Creating flow for target group: {target_group.id} ({target_group.name})")
             flow = CampaignFlow(
                 campaign_id=campaign.id,
                 target_group_id=target_group.id,
+                initial_prompt=spec.base_prompt,
             )
             self.repository.create_flow(flow)
+            flow_count += 1
+            logger.info(f"Created flow: {flow.id}")
 
+        logger.info(f"Total flows created: {flow_count}")
         return campaign
 
     def get_campaign(self, campaign_id: UUID) -> Campaign:

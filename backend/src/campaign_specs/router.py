@@ -7,7 +7,6 @@ from campaign_specs.repository import CampaignSpecRepository
 from campaign_specs.service import CampaignSpecNotFoundError, CampaignSpecService
 from database import get_session
 from models import (
-    Asset,
     CampaignSpecCreate,
     CampaignSpecResponse,
     CampaignSpecUpdate,
@@ -79,46 +78,6 @@ def delete_campaign_spec(
     """Delete a campaign spec."""
     try:
         service.delete_campaign_spec(campaign_spec_id)
-    except CampaignSpecNotFoundError:
-        raise HTTPException(status_code=404, detail='Campaign spec not found')
-
-
-# Asset management endpoints
-@router.get('/{campaign_spec_id}/assets', response_model=list[Asset])
-def get_campaign_spec_assets(
-    campaign_spec_id: UUID,
-    service: CampaignSpecService = Depends(get_campaign_spec_service),
-) -> list[Asset]:
-    """Get all assets for a campaign spec."""
-    try:
-        return service.get_assets(campaign_spec_id)
-    except CampaignSpecNotFoundError:
-        raise HTTPException(status_code=404, detail='Campaign spec not found')
-
-
-@router.post('/{campaign_spec_id}/assets/{asset_id}', status_code=201)
-def add_asset_to_campaign_spec(
-    campaign_spec_id: UUID,
-    asset_id: UUID,
-    service: CampaignSpecService = Depends(get_campaign_spec_service),
-) -> dict[str, str]:
-    """Add an asset to a campaign spec."""
-    try:
-        service.add_asset(campaign_spec_id, asset_id)
-        return {'message': 'Asset added to campaign spec'}
-    except CampaignSpecNotFoundError:
-        raise HTTPException(status_code=404, detail='Campaign spec not found')
-
-
-@router.delete('/{campaign_spec_id}/assets/{asset_id}', status_code=204)
-def remove_asset_from_campaign_spec(
-    campaign_spec_id: UUID,
-    asset_id: UUID,
-    service: CampaignSpecService = Depends(get_campaign_spec_service),
-) -> None:
-    """Remove an asset from a campaign spec."""
-    try:
-        service.remove_asset(campaign_spec_id, asset_id)
     except CampaignSpecNotFoundError:
         raise HTTPException(status_code=404, detail='Campaign spec not found')
 

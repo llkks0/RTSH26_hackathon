@@ -59,7 +59,7 @@ def ensure_database_exists() -> None:
 
 
 # Create engine
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_engine(DATABASE_URL, echo=False)
 
 
 def create_db_and_tables() -> None:

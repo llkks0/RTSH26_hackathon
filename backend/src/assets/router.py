@@ -1,19 +1,73 @@
+import logging
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlmodel import Session
 
 from assets.repository import AssetRepository
 from assets.service import AssetNotFoundError, AssetService
 from database import get_session
+from functions.embedding import create_embedding_simple
+from functions.image import describe_image_from_path
 from models import Asset, AssetCreate, AssetType, AssetUpdate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix='/assets', tags=['assets'])
 
 ASSET_FILES_DIR = Path(__file__).parent.parent.parent / 'asset-files'
 ASSET_FILES_DIR.mkdir(exist_ok=True)
+
+
+# Image extensions that can be processed for descriptions
+IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'}
+
+
+async def process_asset_description_and_embedding(
+    asset: Asset,
+    session: Session,
+) -> None:
+    """
+    Generate description and embedding for an asset.
+
+    This updates the asset's caption (if not set) and embedding in the database.
+    """
+    file_path = ASSET_FILES_DIR / asset.file_name
+
+    # Check if it's an image file
+    if not file_path.suffix.lower() in IMAGE_EXTENSIONS:
+        logger.info(f"Asset {asset.id}: Skipping non-image file {asset.file_name}")
+        return
+
+    if not file_path.exists():
+        logger.warning(f"Asset {asset.id}: File not found at {file_path}")
+        return
+
+    try:
+        # Generate description if caption is empty or generic
+        description = asset.caption
+        if not description or description.strip() == '':
+            logger.info(f"Asset {asset.id}: Generating description...")
+            desc_output = await describe_image_from_path(str(file_path))
+            description = desc_output.description
+            asset.caption = description
+            logger.info(f"Asset {asset.id}: Description generated ({len(description)} chars)")
+
+        # Generate embedding from description
+        if not asset.embedding or all(v == 0.0 for v in asset.embedding):
+            logger.info(f"Asset {asset.id}: Generating embedding...")
+            embedding = create_embedding_simple(description)
+            asset.embedding = embedding
+            logger.info(f"Asset {asset.id}: Embedding generated ({len(embedding)} dims)")
+
+        session.add(asset)
+        session.commit()
+
+    except Exception as e:
+        logger.error(f"Asset {asset.id}: Error processing - {e}")
+        session.rollback()
 
 
 def get_asset_service(session: Session = Depends(get_session)) -> AssetService:
@@ -36,11 +90,12 @@ async def upload_asset(
     file: UploadFile = File(...),
     name: str = Form(...),
     asset_type: AssetType = Form(...),
-    caption: str = Form(...),
+    caption: str = Form(default=''),
     tags: str = Form(default=''),  # comma-separated tags
     service: AssetService = Depends(get_asset_service),
+    session: Session = Depends(get_session),
 ) -> Asset:
-    """Upload a file and create an asset."""
+    """Upload a file and create an asset with auto-generated description and embedding."""
     # Generate unique filename
     file_ext = Path(file.filename or '').suffix
     unique_filename = f'{uuid4()}{file_ext}'
@@ -61,7 +116,14 @@ async def upload_asset(
         caption=caption,
         tags=tag_list,
     )
-    return service.create_asset(asset_data)
+    asset = service.create_asset(asset_data)
+
+    # Generate description and embedding
+    await process_asset_description_and_embedding(asset, session)
+
+    # Refresh to get updated values
+    session.refresh(asset)
+    return asset
 
 
 @router.get('/files/{filename}')

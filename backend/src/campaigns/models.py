@@ -67,6 +67,7 @@ class CampaignFlow(BaseModel, table=True):
 
     campaign_id: UUID = Field(foreign_key='campaign.id', index=True)
     target_group_id: UUID = Field(foreign_key='targetgroup.id', index=True)
+    initial_prompt: str  # The starting prompt for this flow (from campaign spec)
 
     # Relationships
     campaign: Optional['Campaign'] = Relationship(back_populates='campaign_flows')
@@ -222,6 +223,14 @@ class CampaignCreate(SQLModel):
     campaign_spec_id: UUID
 
 
+class CampaignResponse(SQLModel):
+    """Response model for Campaign (without relationships to avoid serialization issues)."""
+
+    id: UUID
+    created_at: datetime
+    campaign_spec_id: UUID
+
+
 class FlowStepCreate(SQLModel):
     """Schema for creating a new flow step."""
 
@@ -370,6 +379,7 @@ class CampaignFlowResponse(SQLModel):
     created_at: datetime
     campaign_id: UUID
     target_group_id: UUID
+    initial_prompt: str
     target_group: TargetGroupResponse | None
     steps: list[FlowStepResponse]
 

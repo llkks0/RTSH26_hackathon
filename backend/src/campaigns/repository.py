@@ -59,12 +59,27 @@ class CampaignRepository:
         return flow
 
     def get_flow(self, flow_id: UUID) -> CampaignFlow | None:
-        """Get a flow by ID."""
-        return self.session.get(CampaignFlow, flow_id)
+        """Get a flow by ID with campaign relationship loaded."""
+        statement = (
+            select(CampaignFlow)
+            .where(CampaignFlow.id == flow_id)
+            .options(
+                selectinload(CampaignFlow.campaign),
+                selectinload(CampaignFlow.target_group),
+            )
+        )
+        return self.session.exec(statement).first()
 
     def get_flows_by_campaign(self, campaign_id: UUID) -> list[CampaignFlow]:
-        """Get all flows for a campaign."""
-        statement = select(CampaignFlow).where(CampaignFlow.campaign_id == campaign_id)
+        """Get all flows for a campaign with relationships loaded."""
+        statement = (
+            select(CampaignFlow)
+            .where(CampaignFlow.campaign_id == campaign_id)
+            .options(
+                selectinload(CampaignFlow.campaign),
+                selectinload(CampaignFlow.target_group),
+            )
+        )
         return list(self.session.exec(statement).all())
 
     # ---------------------------------------------------------
@@ -127,6 +142,36 @@ class CampaignRepository:
         """Get the generation result for a step."""
         statement = select(GenerationResult).where(GenerationResult.step_id == step_id)
         return self.session.exec(statement).first()
+
+    def delete_generation_result(self, result_id: UUID) -> None:
+        """Delete a generation result and all associated images/metrics."""
+        # First delete associated images and their metrics
+        images = self.get_images_by_generation_result(result_id)
+        for image in images:
+            # Delete metrics for this image
+            metrics = self.get_image_metrics(image.id)
+            if metrics:
+                self.session.delete(metrics)
+            # Delete image-asset links
+            self.session.exec(
+                GeneratedImageAsset.__table__.delete().where(
+                    GeneratedImageAsset.generated_image_id == image.id
+                )
+            )
+            # Delete the image
+            self.session.delete(image)
+
+        # Delete generation result-asset links
+        self.session.exec(
+            GenerationResultAsset.__table__.delete().where(
+                GenerationResultAsset.generation_result_id == result_id
+            )
+        )
+
+        # Delete the generation result
+        result = self.get_generation_result(result_id)
+        if result:
+            self.session.delete(result)
 
     def add_generation_result_asset(self, result_id: UUID, asset_id: UUID) -> None:
         """Link an asset to a generation result."""

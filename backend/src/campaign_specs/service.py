@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from campaign_specs.repository import CampaignSpecRepository
-from models import Asset, CampaignSpec, CampaignSpecCreate, CampaignSpecUpdate, TargetGroup
+from models import CampaignSpec, CampaignSpecCreate, CampaignSpecUpdate, TargetGroup
 
 
 class CampaignSpecNotFoundError(Exception):
@@ -20,15 +20,20 @@ class CampaignSpecService:
 
     def create_campaign_spec(self, data: CampaignSpecCreate) -> CampaignSpec:
         """Create a new campaign spec."""
-        # Extract target_group_ids before creating the campaign spec
+        # Extract relationship ids before creating the campaign spec
         target_group_ids = data.target_group_ids
-        campaign_data = data.model_dump(exclude={'target_group_ids'})
+        asset_ids = data.asset_ids
+        campaign_data = data.model_dump(exclude={'target_group_ids', 'asset_ids'})
         campaign_spec = CampaignSpec.model_validate(campaign_data)
         campaign_spec = self.repository.create(campaign_spec)
 
         # Add target groups if provided
         for target_group_id in target_group_ids:
             self.repository.add_target_group(campaign_spec.id, target_group_id)
+
+        # Add assets if provided
+        for asset_id in asset_ids:
+            self.repository.add_asset(campaign_spec.id, asset_id)
 
         # Refresh to get the relationships loaded
         return self.repository.get_by_id(campaign_spec.id)  # type: ignore
@@ -54,12 +59,15 @@ class CampaignSpecService:
 
         update_data = data.model_dump(exclude_unset=True)
         target_group_ids = update_data.pop('target_group_ids', None)
+        asset_ids = update_data.pop('asset_ids', None)
 
         # Update basic fields
         for key, value in update_data.items():
             setattr(campaign_spec, key, value)
 
         campaign_spec = self.repository.update(campaign_spec)
+
+        needs_refresh = False
 
         # Update target groups if provided
         if target_group_ids is not None:
@@ -72,7 +80,23 @@ class CampaignSpecService:
             for target_group_id in target_group_ids:
                 self.repository.add_target_group(campaign_spec_id, target_group_id)
 
-            # Refresh to get updated relationships
+            needs_refresh = True
+
+        # Update assets if provided
+        if asset_ids is not None:
+            # Remove all existing assets
+            current_assets = self.repository.get_assets(campaign_spec_id)
+            for asset in current_assets:
+                self.repository.remove_asset(campaign_spec_id, asset.id)
+
+            # Add new assets
+            for asset_id in asset_ids:
+                self.repository.add_asset(campaign_spec_id, asset_id)
+
+            needs_refresh = True
+
+        # Refresh to get updated relationships if needed
+        if needs_refresh:
             campaign_spec = self.repository.get_by_id(campaign_spec_id)  # type: ignore
 
         return campaign_spec
@@ -83,25 +107,6 @@ class CampaignSpecService:
         if not campaign_spec:
             raise CampaignSpecNotFoundError(campaign_spec_id)
         self.repository.delete(campaign_spec)
-
-    # Asset management
-    def add_asset(self, campaign_spec_id: UUID, asset_id: UUID) -> None:
-        """Add an asset to a campaign spec."""
-        if not self.repository.get_by_id(campaign_spec_id):
-            raise CampaignSpecNotFoundError(campaign_spec_id)
-        self.repository.add_asset(campaign_spec_id, asset_id)
-
-    def remove_asset(self, campaign_spec_id: UUID, asset_id: UUID) -> None:
-        """Remove an asset from a campaign spec."""
-        if not self.repository.get_by_id(campaign_spec_id):
-            raise CampaignSpecNotFoundError(campaign_spec_id)
-        self.repository.remove_asset(campaign_spec_id, asset_id)
-
-    def get_assets(self, campaign_spec_id: UUID) -> list[Asset]:
-        """Get all assets for a campaign spec."""
-        if not self.repository.get_by_id(campaign_spec_id):
-            raise CampaignSpecNotFoundError(campaign_spec_id)
-        return self.repository.get_assets(campaign_spec_id)
 
     # Target group management
     def add_target_group(self, campaign_spec_id: UUID, target_group_id: UUID) -> None:
