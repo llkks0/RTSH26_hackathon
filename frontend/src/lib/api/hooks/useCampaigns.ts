@@ -78,6 +78,22 @@ export function useCampaignBySpecId(campaignSpecId: string) {
   })
 }
 
+/**
+ * Hook to get all campaign specs with their associated campaign instances.
+ * This is useful for the campaign list to determine routing.
+ */
+export function useCampaignSpecsWithInstances() {
+  const { data: campaigns = [], isLoading: campaignsLoading } = useQuery({
+    queryKey: [CAMPAIGNS_QUERY_KEY],
+    queryFn: () => apiClient.getCampaigns(),
+  })
+
+  return {
+    getCampaignForSpec: (specId: string) => campaigns.find(c => c.campaign_spec_id === specId),
+    isLoading: campaignsLoading,
+  }
+}
+
 export function useGetOrCreateCampaign() {
   const queryClient = useQueryClient()
 

@@ -83,6 +83,10 @@ export function generateGraphLayout(graphData: CampaignGraphData): {
     // Process each iteration
     targetGroup.iterations.forEach((iteration) => {
       const iterPrefix = `${targetGroup.id}-iter${iteration.iterationNumber}`
+      const stepState = iteration.stepState
+      const hasImages = iteration.imageGen.generatedImages.length > 0
+      // Show analytics only when step is analyzing or completed (not generating/collecting)
+      const showAnalytics = stepState === 'analyzing' || stepState === 'completed'
 
       // PromptGen Node
       const promptGenId = `promptgen-${iterPrefix}`
@@ -95,6 +99,7 @@ export function generateGraphLayout(graphData: CampaignGraphData): {
           title: `Iteration ${iteration.iterationNumber} - PromptGen`,
           notes: iteration.promptGen.notes,
           usedAssets: iteration.promptGen.usedAssets,
+          stepState: stepState,
         },
       })
 
@@ -107,64 +112,77 @@ export function generateGraphLayout(graphData: CampaignGraphData): {
 
       currentY += VERTICAL_SPACING
 
-      // Image Nodes - middle image centered at tgX, others evenly spaced
+      // Image Nodes - only show if there are images
       const imageNodeIds: string[] = []
-      const numImages = iteration.imageGen.generatedImages.length
-      const middleIndex = Math.floor(numImages / 2)
-      const imagesY = currentY
+      if (hasImages) {
+        const numImages = iteration.imageGen.generatedImages.length
+        const middleIndex = Math.floor(numImages / 2)
+        const imagesY = currentY
 
-      iteration.imageGen.generatedImages.forEach((image, imgIndex) => {
-        const imageNodeId = `image-${image.id}`
-        imageNodeIds.push(imageNodeId)
-        // Position relative to middle image: middle is centered at tgX, others offset by spacing
-        const imageX = tgX + (imgIndex - middleIndex) * IMAGE_HORIZONTAL_SPACING - NODE_WIDTHS.image / 2
+        iteration.imageGen.generatedImages.forEach((image, imgIndex) => {
+          const imageNodeId = `image-${image.id}`
+          imageNodeIds.push(imageNodeId)
+          // Position relative to middle image: middle is centered at tgX, others offset by spacing
+          const imageX = tgX + (imgIndex - middleIndex) * IMAGE_HORIZONTAL_SPACING - NODE_WIDTHS.image / 2
 
+          nodes.push({
+            id: imageNodeId,
+            type: 'image',
+            position: { x: imageX, y: imagesY },
+            data: image,
+          })
+
+          edges.push({
+            id: `e-${promptGenId}-${imageNodeId}`,
+            source: promptGenId,
+            target: imageNodeId,
+            animated: true,
+          })
+        })
+
+        // Account for image node height (~220px) + spacing
+        currentY += 220 + VERTICAL_SPACING
+      }
+
+      // Analytics Node - only show when step is in analyzing or completed state
+      if (showAnalytics) {
+        const analyticsId = `analytics-${iterPrefix}`
         nodes.push({
-          id: imageNodeId,
-          type: 'image',
-          position: { x: imageX, y: imagesY },
-          data: image,
+          id: analyticsId,
+          type: 'analytics',
+          position: { x: tgX - NODE_WIDTHS.analytics / 2, y: currentY },
+          data: {
+            winnerCount: iteration.analytics.winnerImages.length,
+            improvements: iteration.analytics.improvements,
+            differentiationText: iteration.analytics.differentiationText,
+            differentiationTags: iteration.analytics.differentiationTags,
+            iterationNumber: iteration.iterationNumber,
+            stepState: stepState,
+          },
         })
 
-        edges.push({
-          id: `e-${promptGenId}-${imageNodeId}`,
-          source: promptGenId,
-          target: imageNodeId,
-          animated: true,
+        // Connect all images to analytics
+        imageNodeIds.forEach((imageId) => {
+          edges.push({
+            id: `e-${imageId}-${analyticsId}`,
+            source: imageId,
+            target: analyticsId,
+            animated: true,
+          })
         })
-      })
 
-      // Account for image node height (~220px) + spacing
-      currentY += 220 + VERTICAL_SPACING
-
-      // Analytics Node
-      const analyticsId = `analytics-${iterPrefix}`
-      nodes.push({
-        id: analyticsId,
-        type: 'analytics',
-        position: { x: tgX - NODE_WIDTHS.analytics / 2, y: currentY },
-        data: {
-          winnerCount: iteration.analytics.winnerImages.length,
-          improvements: iteration.analytics.improvements,
-          differentiationText: iteration.analytics.differentiationText,
-          differentiationTags: iteration.analytics.differentiationTags,
-          iterationNumber: iteration.iterationNumber,
-        },
-      })
-
-      // Connect all images to analytics
-      imageNodeIds.forEach((imageId) => {
-        edges.push({
-          id: `e-${imageId}-${analyticsId}`,
-          source: imageId,
-          target: analyticsId,
-          animated: true,
-        })
-      })
-
-      // Set up for next iteration
-      previousNodeId = analyticsId
-      currentY += ITERATION_VERTICAL_SPACING
+        // Set up for next iteration
+        previousNodeId = analyticsId
+        currentY += ITERATION_VERTICAL_SPACING
+      } else if (hasImages) {
+        // If we have images but no analytics yet, connect to the last image for next iteration
+        previousNodeId = imageNodeIds[Math.floor(imageNodeIds.length / 2)] || promptGenId
+        currentY += ITERATION_VERTICAL_SPACING
+      } else {
+        // No images yet, connect to prompt for next iteration
+        previousNodeId = promptGenId
+        currentY += ITERATION_VERTICAL_SPACING
+      }
     })
   })
 

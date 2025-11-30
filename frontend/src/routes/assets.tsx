@@ -243,7 +243,7 @@ function Assets() {
                   <img
                     src={apiClient.getAssetFileUrl(asset.file_name)}
                     alt={asset.name}
-                    className="w-full h-full object-cover"
+                    className="max-h-full max-w-full object-contain"
                   />
                 </div>
                 <div className="p-3 border-t">
@@ -267,11 +267,11 @@ function Assets() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             {pendingFileUrl && (
-              <div className="rounded-lg border overflow-hidden">
+              <div className="rounded-lg border overflow-hidden bg-muted flex items-center justify-center">
                 <img
                   src={pendingFileUrl}
                   alt="Preview"
-                  className="w-full h-auto"
+                  className="max-h-64 max-w-full object-contain"
                 />
               </div>
             )}
@@ -344,6 +344,14 @@ function Assets() {
           </DialogHeader>
           {selectedAsset && (
             <div className="space-y-4 py-4">
+              <div className="rounded-lg border overflow-hidden bg-muted flex items-center justify-center">
+                <img
+                  src={apiClient.getAssetFileUrl(selectedAsset.file_name)}
+                  alt={selectedAsset.name}
+                  className="max-h-64 max-w-full object-contain"
+                />
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="assetName">Asset Name</Label>
                 <Input

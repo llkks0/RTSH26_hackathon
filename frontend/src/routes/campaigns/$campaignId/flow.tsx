@@ -8,5 +8,5 @@ export const Route = createFileRoute('/campaigns/$campaignId/flow')({
 function CampaignFlowPage() {
     const {campaignId} = Route.useParams()
 
-    return <CampaignGraph campaignId={campaignId}/>
+    return <div className="-m-6"><CampaignGraph campaignId={campaignId}/></div>
 }

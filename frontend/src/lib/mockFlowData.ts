@@ -10,8 +10,11 @@ export interface GeneratedImage extends Record<string, unknown> {
   }
 }
 
+export type StepState = 'generating' | 'collecting' | 'analyzing' | 'completed'
+
 export interface Iteration extends Record<string, unknown> {
   iterationNumber: number
+  stepState: StepState
   promptGen: {
     prompt: string
     usedAssets: string[]
@@ -32,12 +35,20 @@ export interface Iteration extends Record<string, unknown> {
   }
 }
 
+/**
+ * TargetGroupFlow represents one branch of the campaign graph.
+ * Each branch corresponds to a CampaignFlow in the backend (one per target group).
+ */
 export interface TargetGroupFlow extends Record<string, unknown> {
   id: string
   name: string
   iterations: Iteration[]
 }
 
+/**
+ * FlowData represents the complete campaign visualization data.
+ * This is the "whole graph" that contains all target group branches and their iterations.
+ */
 export interface FlowData {
   campaignId: string
   campaignName: string
@@ -45,6 +56,10 @@ export interface FlowData {
   enhancedPrompt: string
   targetGroups: TargetGroupFlow[]
 }
+
+// Aliases for clearer naming (FlowData = entire campaign graph, TargetGroupFlow = one branch)
+export type CampaignGraphData = FlowData
+export type TargetGroupBranch = TargetGroupFlow
 
 export const getMockFlowData = (campaignId: string): FlowData => {
   return {
@@ -60,6 +75,7 @@ export const getMockFlowData = (campaignId: string): FlowData => {
         iterations: [
           {
             iterationNumber: 0,
+            stepState: 'completed',
             promptGen: {
               prompt:
                 'Create a vibrant, high-energy advertisement for premium running shoes targeting urban young professionals in Berlin, featuring sleek city backgrounds, modern aesthetics, and lifestyle integration',
@@ -139,6 +155,7 @@ export const getMockFlowData = (campaignId: string): FlowData => {
           },
           {
             iterationNumber: 1,
+            stepState: 'completed',
             promptGen: {
               prompt:
                 'Premium running shoes ad for Berlin young professionals with warm golden hour lighting, motion blur effect on shoes, prominent Berlin landmarks (TV Tower, Brandenburg Gate), dynamic running poses, urban lifestyle integration',
@@ -224,6 +241,7 @@ export const getMockFlowData = (campaignId: string): FlowData => {
         iterations: [
           {
             iterationNumber: 0,
+            stepState: 'completed',
             promptGen: {
               prompt:
                 'Create a warm, family-friendly advertisement for premium running shoes targeting families in Munich, featuring park settings, family activities, and emphasis on comfort and quality',

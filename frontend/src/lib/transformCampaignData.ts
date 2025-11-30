@@ -46,6 +46,7 @@ function transformStepToIteration(step: FlowStepFull): Iteration {
 
   return {
     iterationNumber: step.iteration,
+    stepState: step.state,
     promptGen: {
       prompt: generationResult?.prompt || '',
       usedAssets: generationResult?.selected_assets?.map(asset => asset.name) || [],
@@ -73,7 +74,7 @@ function transformImageToGraphImage(
 
   return {
     id: image.id,
-    imageUrl: apiClient.getAssetFileUrl(image.file_name),
+    imageUrl: apiClient.getGeneratedImageFileUrl(image.file_name),
     isWinner: winnerIds.includes(image.id),
     analytics: {
       clickRate: metrics?.ctr ? metrics.ctr * 100 : 0,

@@ -44,9 +44,9 @@ export const ImageNode = memo(({ data }: { data: ImageNodeData }) => {
         </div>
 
         <div className="text-xs space-y-0.5 text-muted-foreground">
-          <div>CTR: {(data.analytics as ImageNodeData['analytics']).clickRate}%</div>
-          <div>CVR: {(data.analytics as ImageNodeData['analytics']).conversionRate}%</div>
-          <div>Eng: {(data.analytics as ImageNodeData['analytics']).engagement}%</div>
+          <div>CTR: {(data.analytics as ImageNodeData['analytics']).clickRate.toFixed(2)}%</div>
+          <div>CVR: {(data.analytics as ImageNodeData['analytics']).conversionRate.toFixed(2)}%</div>
+          <div>Eng: {(data.analytics as ImageNodeData['analytics']).engagement.toFixed(2)}%</div>
         </div>
       </div>
 

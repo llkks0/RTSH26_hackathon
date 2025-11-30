@@ -87,6 +87,7 @@ export interface CampaignSpec {
   base_prompt: string
   max_iterations: number
   target_group_ids: string[]
+  asset_ids: string[]
 }
 
 export interface CampaignSpecCreate {
@@ -94,6 +95,7 @@ export interface CampaignSpecCreate {
   base_prompt: string
   max_iterations?: number // defaults to 2
   target_group_ids?: string[]
+  asset_ids?: string[]
 }
 
 export interface CampaignSpecUpdate {
@@ -101,6 +103,7 @@ export interface CampaignSpecUpdate {
   base_prompt?: string
   max_iterations?: number
   target_group_ids?: string[]
+  asset_ids?: string[]
 }
 
 // ---------------------------------------------------------
