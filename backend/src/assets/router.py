@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlmodel import Session
 
@@ -37,7 +37,7 @@ async def process_asset_description_and_embedding(
     file_path = ASSET_FILES_DIR / asset.file_name
 
     # Check if it's an image file
-    if not file_path.suffix.lower() in IMAGE_EXTENSIONS:
+    if file_path.suffix.lower() not in IMAGE_EXTENSIONS:
         logger.info(f"Asset {asset.id}: Skipping non-image file {asset.file_name}")
         return
 

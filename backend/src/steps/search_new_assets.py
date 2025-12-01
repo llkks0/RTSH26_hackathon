@@ -1,6 +1,5 @@
 import logging
 import math
-from typing import List
 from uuid import UUID
 
 from sqlmodel import Session, select
@@ -19,7 +18,7 @@ DEFAULT_TOP_K = 5
 logger = logging.getLogger(__name__)
 
 
-def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
+def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
     """
     Compute cosine similarity between two vectors.
     
@@ -32,25 +31,25 @@ def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
     """
     if len(vec1) != len(vec2):
         raise ValueError(f"Vectors must have the same length. Got {len(vec1)} and {len(vec2)}")
-    
+
     dot_product = sum(a * b for a, b in zip(vec1, vec2))
     magnitude1 = math.sqrt(sum(a * a for a in vec1))
     magnitude2 = math.sqrt(sum(a * a for a in vec2))
-    
+
     if magnitude1 == 0 or magnitude2 == 0:
         return 0.0
-    
+
     return dot_product / (magnitude1 * magnitude2)
 
 
 def search_new_assets(
     session: Session,
     prompt: str | None = None,
-    prompt_embedding: List[float] | None = None,
+    prompt_embedding: list[float] | None = None,
     top_k: int = DEFAULT_TOP_K,
     asset_type: AssetType | None = None,
     embedding_model: str = DEFAULT_EMBEDDING_MODEL,
-) -> List[tuple[Asset, float]]:
+) -> list[tuple[Asset, float]]:
     """
     Search for assets that are most similar to a given prompt using embedding similarity.
     
@@ -75,31 +74,31 @@ def search_new_assets(
     if prompt_embedding is None:
         if prompt is None or not prompt.strip():
             raise ValueError("Either 'prompt' or 'prompt_embedding' must be provided")
-        
+
         try:
             prompt_embedding = create_embedding(prompt.strip(), embedding_model)
         except Exception as e:
             raise RuntimeError(f"Failed to create embedding for prompt: {e}") from e
-    
+
     if not prompt_embedding:
         raise ValueError("Prompt embedding cannot be empty")
-    
+
     # Query assets with embeddings
     # SQLModel columns support isnot() method directly
     statement = select(Asset).where(Asset.embedding.isnot(None))
-    
+
     if asset_type:
         statement = statement.where(Asset.asset_type == asset_type)
-    
+
     assets = list(session.exec(statement).all())
-    
+
     if not assets:
         logger.info("No assets with embeddings available for search")
         return []
-    
+
     # Compute similarity scores
-    scored_assets: List[tuple[Asset, float]] = []
-    
+    scored_assets: list[tuple[Asset, float]] = []
+
     logger.info(
         "Computing similarity against %s assets (top_k=%s)", len(assets), top_k
     )
@@ -108,7 +107,7 @@ def search_new_assets(
         # Double-check embedding exists (defensive programming)
         if asset.embedding is None or len(asset.embedding) == 0:
             continue
-        
+
         try:
             similarity = cosine_similarity(prompt_embedding, asset.embedding)
             scored_assets.append((asset, similarity))
@@ -120,10 +119,10 @@ def search_new_assets(
                 e,
             )
             continue
-    
+
     # Sort by similarity (highest first) and return top K
     scored_assets.sort(key=lambda x: x[1], reverse=True)
-    
+
     results = scored_assets[:top_k]
     logger.info("Returning %s similar assets", len(results))
     return results
@@ -132,11 +131,11 @@ def search_new_assets(
 def search_new_assets_by_ids(
     session: Session,
     prompt: str | None = None,
-    prompt_embedding: List[float] | None = None,
+    prompt_embedding: list[float] | None = None,
     top_k: int = DEFAULT_TOP_K,
     asset_type: AssetType | None = None,
     embedding_model: str = DEFAULT_EMBEDDING_MODEL,
-) -> List[UUID]:
+) -> list[UUID]:
     """
     Convenience function that returns only asset IDs (not full Asset objects).
     
@@ -163,12 +162,12 @@ if __name__ == "__main__":
     except ImportError:  # pragma: no cover
         from database import engine  # type: ignore
     from sqlmodel import Session
-    
+
     # Example usage
     test_prompt = "A person running in a park with modern running shoes"
-    
+
     print(f"Searching for assets similar to: '{test_prompt}'\n")
-    
+
     # Create a session directly for testing
     with Session(engine) as session:
         try:
@@ -178,7 +177,7 @@ if __name__ == "__main__":
                 prompt=test_prompt,
                 top_k=5,
             )
-            
+
             if results:
                 print(f"Found {len(results)} similar assets:\n")
                 for i, (asset, similarity) in enumerate(results, 1):

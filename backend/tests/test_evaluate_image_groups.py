@@ -180,7 +180,6 @@ class TestAnalyzeImageDifferences:
 
     def _get_function(self):
         """Helper to get the function, reloading if necessary."""
-        import importlib
         # Clear any cached imports
         modules_to_clear = [
             'steps.evaluate_image_groups',
@@ -191,11 +190,11 @@ class TestAnalyzeImageDifferences:
         for mod_name in modules_to_clear:
             if mod_name in sys.modules:
                 del sys.modules[mod_name]
-        
+
         # Re-patch schemas
         sys.modules['schemas'] = MockSchemas()
         sys.modules['src.schemas'] = MockSchemas()
-        
+
         from steps.evaluate_image_groups import analyze_image_differences
         return analyze_image_differences
 

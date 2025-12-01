@@ -17,7 +17,6 @@ import httpx
 
 from models import Asset
 
-
 # FLUX.2 API Configuration
 BFL_API_KEY = os.environ.get("BFL_API_KEY")
 FLUX_ENDPOINT = "https://api.bfl.ai/v1/flux-2-pro"

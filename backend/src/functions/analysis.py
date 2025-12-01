@@ -19,7 +19,6 @@ from openai import (
 
 from .types import ImageAnalysisInput, ImageAnalysisOutput
 
-
 DEFAULT_MODEL = 'gpt-4o-mini'
 
 FALLBACK_ANALYSIS = ImageAnalysisOutput(

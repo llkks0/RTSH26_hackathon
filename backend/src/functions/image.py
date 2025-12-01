@@ -19,7 +19,6 @@ from openai import (
 
 from .types import ImageDescriptionInput, ImageDescriptionOutput
 
-
 DEFAULT_MODEL = 'gpt-4o-mini'
 
 FALLBACK_DESCRIPTION = (

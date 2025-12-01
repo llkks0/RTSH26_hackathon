@@ -5,11 +5,9 @@ All input/output types are defined here for strong typing and documentation.
 """
 
 from dataclasses import dataclass, field
-from typing import Literal
 from uuid import UUID
 
 from models import Asset, AssetType, TargetGroup
-
 
 # ---------------------------------------------------------
 # Image Description Types

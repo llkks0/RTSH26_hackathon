@@ -13,7 +13,6 @@ GENERATED_IMAGES_DIR = Path(__file__).parent.parent.parent / "generated-images"
 
 from campaign_specs.repository import CampaignSpecRepository
 from campaigns.models import (
-    Campaign,
     CampaignCreate,
     CampaignFlow,
     CampaignFullResponse,

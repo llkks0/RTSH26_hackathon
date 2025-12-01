@@ -6,10 +6,11 @@ import argparse
 import logging
 import re
 from collections import defaultdict
+from collections.abc import Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Set
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
@@ -24,7 +25,6 @@ from steps.get_analytics import get_analytics
 from steps.search_new_assets import DEFAULT_TOP_K, search_new_assets
 from steps.select_top_images import select_top_images
 
-
 logger = logging.getLogger(__name__)
 
 DEFAULT_IMAGES_PER_GROUP = 5
@@ -32,8 +32,8 @@ DEFAULT_TOP_N = 2
 DEFAULT_ITERATIONS = 2
 
 
-def _results_to_images(group: str, raw_images: List[Dict[str, Any]]) -> List[ImageData]:
-    images: List[ImageData] = []
+def _results_to_images(group: str, raw_images: list[dict[str, Any]]) -> list[ImageData]:
+    images: list[ImageData] = []
     for idx, result in enumerate(raw_images, start=1):
         image_id = str(result.get("request_id") or f"{group}-{idx}")
         file_name = str(result.get("image_url") or f"generated_{image_id}.png")
@@ -53,17 +53,17 @@ def _results_to_images(group: str, raw_images: List[Dict[str, Any]]) -> List[Ima
     return images
 
 
-def _attach_analytics(images: List[ImageData]) -> List[ImageData]:
+def _attach_analytics(images: list[ImageData]) -> list[ImageData]:
     analytics = get_analytics(images)
     analytics_map = {item.id: item for item in analytics}
-    enriched: List[ImageData] = []
+    enriched: list[ImageData] = []
     for image in images:
         enriched.append(image.model_copy(update={"analytics": analytics_map[image.id]}))
     return enriched
 
 
 def _build_asset_search_prompt(images: Sequence[ImageData], top_ids: set[str]) -> str:
-    fragments: List[str] = []
+    fragments: list[str] = []
     for image in images:
         if image.id not in top_ids:
             continue
@@ -108,7 +108,7 @@ def _maybe_db_session():
     try:
         with Session(engine) as session:
             yield session
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[warn] Skipping database-backed asset search: {exc}")
         yield None
 
@@ -122,7 +122,7 @@ def _search_assets_safe(db_session: Session | None, prompt: str, top_k: int):
             prompt=prompt,
             top_k=top_k,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[warn] Asset search failed, continuing without new references: {exc}")
         return []
 
@@ -151,11 +151,11 @@ def _prepare_output_root(output_dir: str | None) -> Path:
 
 
 def _save_images_to_disk(
-    raw_images: List[Dict[str, Any]],
+    raw_images: list[dict[str, Any]],
     destination: Path,
     iteration_label: str,
-) -> List[str]:
-    saved_paths: List[str] = []
+) -> list[str]:
+    saved_paths: list[str] = []
     destination.mkdir(parents=True, exist_ok=True)
     for idx, image in enumerate(raw_images, start=1):
         url = image.get("image_url")
@@ -170,16 +170,16 @@ def _save_images_to_disk(
             target_path.write_bytes(response.content)
             saved_paths.append(str(target_path))
             logger.debug("Saved %s to %s", url, target_path)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("Failed to save image %s: %s", url, exc)
     return saved_paths
 
 
 def _collect_asset_preferences_from_results(
-    raw_images: List[Dict[str, Any]],
-    preferred_image_ids: Set[str],
-) -> Dict[str, Set[str]]:
-    preferences: Dict[str, Set[str]] = defaultdict(set)
+    raw_images: list[dict[str, Any]],
+    preferred_image_ids: set[str],
+) -> dict[str, set[str]]:
+    preferences: dict[str, set[str]] = defaultdict(set)
     for image in raw_images:
         request_id = str(image.get("request_id"))
         if request_id not in preferred_image_ids:
@@ -191,7 +191,7 @@ def _collect_asset_preferences_from_results(
     return preferences
 
 
-def _normalize_class_name(name: str, available_classes: Set[str]) -> str | None:
+def _normalize_class_name(name: str, available_classes: set[str]) -> str | None:
     candidates = [name, name.lower()]
     if name.endswith("s"):
         candidates.append(name[:-1])
@@ -205,9 +205,9 @@ def _normalize_class_name(name: str, available_classes: Set[str]) -> str | None:
 
 def _collect_asset_preferences_from_similar(
     similar_assets: Sequence[tuple[Any, float]],
-    available_classes: Set[str],
-) -> Dict[str, Set[str]]:
-    preferences: Dict[str, Set[str]] = defaultdict(set)
+    available_classes: set[str],
+) -> dict[str, set[str]]:
+    preferences: dict[str, set[str]] = defaultdict(set)
     for asset, _score in similar_assets:
         asset_type = getattr(asset, "asset_type", None)
         if asset_type is None:
@@ -222,10 +222,10 @@ def _collect_asset_preferences_from_similar(
 
 
 def _merge_preference_maps(
-    available_classes: Set[str],
-    *maps: Dict[str, Set[str]],
-) -> Dict[str, Set[str]]:
-    merged: Dict[str, Set[str]] = defaultdict(set)
+    available_classes: set[str],
+    *maps: dict[str, set[str]],
+) -> dict[str, set[str]]:
+    merged: dict[str, set[str]] = defaultdict(set)
     for pref_map in maps:
         for cls, ids in pref_map.items():
             normalized = _normalize_class_name(cls, available_classes)
@@ -244,10 +244,10 @@ def run_campaign(
     search_top_k: int = DEFAULT_TOP_K,
     iterations: int = DEFAULT_ITERATIONS,
     output_dir: str | None = None,
-) -> Dict[str, dict]:
+) -> dict[str, dict]:
     session = FluxBatchSession(assets_dir)
     available_classes = set(session.assets.keys())
-    campaign_results: Dict[str, dict] = {}
+    campaign_results: dict[str, dict] = {}
     run_output_root = _prepare_output_root(output_dir)
     logger.info("Saving generated assets under %s", run_output_root)
 
@@ -260,9 +260,9 @@ def run_campaign(
             group_dir.mkdir(parents=True, exist_ok=True)
             logger.info("Starting group '%s' (output=%s)", group, group_dir)
 
-            preferred_assets: Dict[str, Set[str]] | None = None
+            preferred_assets: dict[str, set[str]] | None = None
             prompt_for_iteration = base_prompt
-            iteration_records: List[dict] = []
+            iteration_records: list[dict] = []
 
             for iteration_idx in range(total_iterations):
                 iteration_label = f"iter_{iteration_idx + 1}"
@@ -441,7 +441,7 @@ def main() -> None:
         )
     except FluxGenerationError as exc:
         print(f"Flux generation failed: {exc}")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"Unexpected error: {exc}")
 
 

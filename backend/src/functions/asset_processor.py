@@ -6,7 +6,6 @@ Processes assets by generating descriptions and embeddings asynchronously.
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from uuid import UUID
 
 from sqlmodel import Session
 
@@ -15,12 +14,8 @@ from models import Asset
 from .embedding import create_embedding_simple
 from .image import describe_image_from_path, describe_image_from_url
 from .types import (
-    AssetProcessingInput,
     AssetProcessingOutput,
-    EmbeddingInput,
-    ImageDescriptionInput,
 )
-
 
 DEFAULT_DESCRIPTION_MODEL = 'gpt-4o-mini'
 DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small'

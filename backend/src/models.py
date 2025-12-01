@@ -5,7 +5,6 @@ from uuid import UUID, uuid4
 from sqlalchemy import ARRAY, Column, Float, String
 from sqlmodel import Field, Relationship, SQLModel
 
-
 # ---------------------------------------------------------
 # Enums
 # ---------------------------------------------------------
@@ -174,7 +173,7 @@ class CampaignSpecResponse(CampaignSpecBase):
     asset_ids: list[UUID] = Field(default_factory=list)
 
     @classmethod
-    def from_campaign_spec(cls, spec: CampaignSpec) -> 'CampaignSpecResponse':
+    def from_campaign_spec(cls, spec: CampaignSpec) -> CampaignSpecResponse:
         """Create response from CampaignSpec model."""
         return cls(
             id=spec.id,

@@ -3,11 +3,10 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import dotenv
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-import dotenv
 
 dotenv.load_dotenv()
 
@@ -20,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 from sqlmodel import Session, select
 
-from assets.router import router as assets_router, process_asset_description_and_embedding
+from assets.router import process_asset_description_and_embedding
+from assets.router import router as assets_router
 from campaign_specs.router import router as campaign_specs_router
 from campaigns.router import router as campaigns_router
 from database import create_db_and_tables, engine

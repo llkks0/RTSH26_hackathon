@@ -28,7 +28,6 @@ from campaigns.models import (
     Campaign,
     CampaignCreate,
     CampaignFlow,
-    FlowStep,
     FlowStepCreate,
     FlowStepState,
     GeneratedImageCreate,
@@ -37,10 +36,10 @@ from campaigns.models import (
 )
 from campaigns.repository import CampaignRepository
 from campaigns.service import CampaignService
-from models import Asset, CampaignSpec, TargetGroup
+from models import Asset, CampaignSpec
 
-from .analytics import generate_analytics_for_images
 from .analysis import analyze_winning_images, select_top_images_by_score
+from .analytics import generate_analytics_for_images
 from .asset_selection import get_base_and_reference_assets, select_asset_sets
 from .embedding import compute_mean_embedding
 from .image import describe_image_from_path, describe_image_from_url
@@ -90,7 +89,7 @@ class Job:
     step_id: UUID | None = None
     priority: int = 0  # Lower is higher priority
 
-    def __lt__(self, other: 'Job') -> bool:
+    def __lt__(self, other: Job) -> bool:
         return self.priority < other.priority
 
 

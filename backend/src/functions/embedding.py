@@ -16,7 +16,6 @@ from openai import (
 
 from .types import EmbeddingInput, EmbeddingOutput
 
-
 DEFAULT_MODEL = 'text-embedding-3-small'
 FALLBACK_DIM = 1536  # text-embedding-3-small has 1536 dimensions
 FALLBACK_EMBEDDING = [0.0] * FALLBACK_DIM

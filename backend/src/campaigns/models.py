@@ -1,13 +1,11 @@
 import enum
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import ARRAY, Column, Float, String
 from sqlmodel import Field, Relationship, SQLModel
 
 from models import Asset, BaseModel, CampaignSpec, TargetGroup
-
 
 # ---------------------------------------------------------
 # Enums
@@ -53,8 +51,8 @@ class Campaign(BaseModel, table=True):
     campaign_spec_id: UUID = Field(foreign_key='campaignspec.id', index=True)
 
     # Relationships
-    campaign_spec: Optional[CampaignSpec] = Relationship()
-    campaign_flows: list['CampaignFlow'] = Relationship(back_populates='campaign')
+    campaign_spec: CampaignSpec | None = Relationship()
+    campaign_flows: list[CampaignFlow] = Relationship(back_populates='campaign')
 
 
 # ---------------------------------------------------------
@@ -70,12 +68,12 @@ class CampaignFlow(BaseModel, table=True):
     initial_prompt: str  # The starting prompt for this flow (from campaign spec)
 
     # Relationships
-    campaign: Optional['Campaign'] = Relationship(back_populates='campaign_flows')
-    target_group: Optional[TargetGroup] = Relationship()
-    steps: list['FlowStep'] = Relationship(back_populates='flow')
+    campaign: Campaign | None = Relationship(back_populates='campaign_flows')
+    target_group: TargetGroup | None = Relationship()
+    steps: list[FlowStep] = Relationship(back_populates='flow')
 
     @property
-    def current_step(self) -> 'FlowStep | None':
+    def current_step(self) -> FlowStep | None:
         """Get the latest step (highest iteration)."""
         if not self.steps:
             return None
@@ -105,12 +103,12 @@ class FlowStep(BaseModel, table=True):
     input_insights: str | None = None
 
     # Relationships
-    flow: Optional['CampaignFlow'] = Relationship(back_populates='steps')
-    generation_result: Optional['GenerationResult'] = Relationship(
+    flow: CampaignFlow | None = Relationship(back_populates='steps')
+    generation_result: GenerationResult | None = Relationship(
         back_populates='step',
         sa_relationship_kwargs={'uselist': False},
     )
-    analysis_result: Optional['AnalysisResult'] = Relationship(
+    analysis_result: AnalysisResult | None = Relationship(
         back_populates='step',
         sa_relationship_kwargs={'uselist': False},
     )
@@ -129,9 +127,9 @@ class GenerationResult(BaseModel, table=True):
     prompt_notes: str | None = None  # LLM reasoning/explanation
 
     # Relationships
-    step: Optional['FlowStep'] = Relationship(back_populates='generation_result')
+    step: FlowStep | None = Relationship(back_populates='generation_result')
     selected_assets: list[Asset] = Relationship(link_model=GenerationResultAsset)
-    generated_images: list['GeneratedImage'] = Relationship(back_populates='generation_result')
+    generated_images: list[GeneratedImage] = Relationship(back_populates='generation_result')
 
 
 # ---------------------------------------------------------
@@ -148,9 +146,9 @@ class GeneratedImage(BaseModel, table=True):
     model_version: str | None = None
 
     # Relationships
-    generation_result: Optional['GenerationResult'] = Relationship(back_populates='generated_images')
+    generation_result: GenerationResult | None = Relationship(back_populates='generated_images')
     source_assets: list[Asset] = Relationship(link_model=GeneratedImageAsset)
-    metrics: Optional['ImageMetrics'] = Relationship(
+    metrics: ImageMetrics | None = Relationship(
         back_populates='image',
         sa_relationship_kwargs={'uselist': False},
     )
@@ -179,7 +177,7 @@ class ImageMetrics(BaseModel, table=True):
     cpa: float = Field(default=0.0)  # cost / conversions
 
     # Relationships
-    image: Optional['GeneratedImage'] = Relationship(back_populates='metrics')
+    image: GeneratedImage | None = Relationship(back_populates='metrics')
 
     def compute_derived_metrics(self) -> None:
         """Compute derived metrics from raw values."""
@@ -209,7 +207,7 @@ class AnalysisResult(BaseModel, table=True):
     diff_tags: list[str] = Field(default_factory=list, sa_column=Column(ARRAY(String)))
 
     # Relationships
-    step: Optional['FlowStep'] = Relationship(back_populates='analysis_result')
+    step: FlowStep | None = Relationship(back_populates='analysis_result')
 
 
 # ---------------------------------------------------------
@@ -308,7 +306,7 @@ class GeneratedImageResponse(SQLModel):
     file_name: str
     metadata_tags: list[str] | None
     model_version: str | None
-    source_assets: list['AssetResponse']
+    source_assets: list[AssetResponse]
     metrics: ImageMetricsResponse | None
 
 

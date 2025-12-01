@@ -14,8 +14,6 @@ from uuid import UUID
 
 from sqlmodel import Session, select
 
-from campaigns.models import Campaign, CampaignFlow, FlowStep, FlowStepState
-from campaigns.repository import CampaignRepository
 from database import engine
 from models import CampaignSpec
 

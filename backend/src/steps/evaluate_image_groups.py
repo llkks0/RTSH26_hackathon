@@ -26,10 +26,10 @@ Example:
     >>> print(result['differentiation_tags'])
 """
 import json
+import logging
 import os
 import sys
-import logging
-from typing import List, TypedDict
+from typing import TypedDict
 
 try:
     from dotenv import load_dotenv
@@ -53,7 +53,7 @@ from .select_top_images import select_top_images
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['analyze_image_differences', 'ImageAnalysisResult', 'DEFAULT_MODEL']
+__all__ = ['DEFAULT_MODEL', 'ImageAnalysisResult', 'analyze_image_differences']
 
 DEFAULT_MODEL = 'gpt-4o-mini'
 
@@ -85,7 +85,7 @@ class ImageAnalysisResult(TypedDict):
 
 
 def analyze_image_differences(
-    analytics_data: List[AnalyticsData] | List[ImageData],
+    analytics_data: list[AnalyticsData] | list[ImageData],
     top_n: int = 2,
     model: str = DEFAULT_MODEL,
 ) -> ImageAnalysisResult:
@@ -179,9 +179,9 @@ def analyze_image_differences(
         - Analysis quality depends on the OpenAI model used
     """
     # Extract AnalyticsData and map to ImageData if needed
-    analytics_list: List[AnalyticsData] = []
+    analytics_list: list[AnalyticsData] = []
     image_data_map: dict[str, ImageData] = {}
-    
+
     for item in analytics_data:
         if isinstance(item, ImageData):
             if item.analytics is None:
@@ -192,13 +192,13 @@ def analyze_image_differences(
             analytics_list.append(item)
         else:
             raise TypeError(f"Unsupported type: {type(item)}")
-    
+
     if len(analytics_list) < top_n + 1:
         raise ValueError(
             f"Not enough images to compare. Need at least {top_n + 1} images, "
             f"but only {len(analytics_list)} provided."
         )
-    
+
     logger.info(
         "Analyzing %s creatives (top_n=%s) for performance differences",
         len(analytics_list),
@@ -208,10 +208,10 @@ def analyze_image_differences(
     # Select top N images
     top_analytics = select_top_images(analytics_list, top_n=top_n)
     top_ids = {analytics.id for analytics in top_analytics}
-    
+
     # Get bottom images (non-selected)
     bottom_analytics = [a for a in analytics_list if a.id not in top_ids]
-    
+
     # Prepare data for ChatGPT analysis
     top_images_data = []
     for analytics in top_analytics:
@@ -232,7 +232,7 @@ def analyze_image_differences(
                 'conversion_value': analytics.conversion_value,
             }
         })
-    
+
     bottom_images_data = []
     for analytics in bottom_analytics:
         img_data = image_data_map.get(analytics.id)
@@ -252,7 +252,7 @@ def analyze_image_differences(
                 'conversion_value': analytics.conversion_value,
             }
         })
-    
+
     # Call ChatGPT for analysis
     api_key = os.getenv('OPENAI_API_KEY')
     if not api_key:
@@ -266,7 +266,7 @@ def analyze_image_differences(
             'top_image_ids': [img['id'] for img in top_images_data],
             'bottom_image_ids': [img['id'] for img in bottom_images_data],
         }
-    
+
     client = OpenAI(api_key=api_key)
     logger.info(
         "Requesting differentiation analysis via %s (top=%s, bottom=%s)",
@@ -274,14 +274,14 @@ def analyze_image_differences(
         len(top_images_data),
         len(bottom_images_data),
     )
-    
+
     # Build prompt for ChatGPT
     system_prompt = (
         "You are an expert marketing analyst specializing in ad creative performance. "
         "Your task is to analyze why certain ad images perform better than others "
         "based on their analytics metrics and metadata."
     )
-    
+
     user_prompt = f"""Analyze the following ad images and explain what makes the top-performing images successful compared to the lower-performing ones.
 
 TOP-PERFORMING IMAGES ({len(top_images_data)} images):
@@ -306,7 +306,7 @@ Respond in JSON format with this structure:
     "differentiation_text": "Your detailed explanation here...",
     "differentiation_tags": ["tag1", "tag2", "tag3", ...]
 }}"""
-    
+
     try:
         response = client.chat.completions.create(
             model=model,
@@ -372,7 +372,7 @@ Respond in JSON format with this structure:
 if __name__ == "__main__":
     # Test mode
     from .get_analytics import get_analytics
-    
+
     test_images = [
         ImageData(
             id="image_1",
@@ -405,18 +405,18 @@ if __name__ == "__main__":
             final_prompt="Running shoes in an urban evening setting",
         ),
     ]
-    
+
     # Get analytics for all images
     analytics = get_analytics(test_images)
-    
+
     # Attach analytics to images
     for img, analytics_item in zip(test_images, analytics):
         img.analytics = analytics_item
-    
+
     # Analyze differences
     print("Analyzing image performance differences...\n")
     result = analyze_image_differences(test_images, top_n=2)
-    
+
     print("=" * 80)
     print("ANALYSIS RESULTS")
     print("=" * 80)

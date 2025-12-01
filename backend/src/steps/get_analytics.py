@@ -1,6 +1,5 @@
 import logging
 import random
-from typing import List
 
 try:
     from ..schemas import AnalyticsData, ImageData
@@ -11,7 +10,7 @@ except ImportError:  # pragma: no cover - fallback for script execution
 logger = logging.getLogger(__name__)
 
 
-def get_analytics(image_ids: List[ImageData]) -> List[AnalyticsData]:
+def get_analytics(image_ids: list[ImageData]) -> list[AnalyticsData]:
     """
     Generates mock Google Ads–style analytics data for a list of image IDs.
     This simulates impressions, clicks, interactions, conversions, etc.

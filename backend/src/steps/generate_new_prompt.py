@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
-from typing import Any, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 try:
 	from ..models import Asset
 except ImportError:  # pragma: no cover - fallback for standalone execution
-	from models import Asset  # type: ignore
+	pass  # type: ignore
 from .evaluate_image_groups import ImageAnalysisResult
-
 
 logger = logging.getLogger(__name__)
 

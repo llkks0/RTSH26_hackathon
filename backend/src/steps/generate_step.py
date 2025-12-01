@@ -1,12 +1,12 @@
-import os
-import time
-import random
 import base64
 import logging
-import requests
+import os
+import random
+import time
 from pathlib import Path
-from typing import Dict, List, Any, Tuple, Optional, Set
+from typing import Any
 
+import requests
 
 BFL_API_KEY = os.environ.get("BFL_API_KEY")
 FLUX_ENDPOINT = "https://api.bfl.ai/v1/flux-2-pro"
@@ -43,11 +43,11 @@ def encode_image_to_base64(path: str) -> str:
 def call_flux_edit(
     prompt: str,
     input_image_b64: str,
-    reference_images_b64: Optional[List[str]] = None,
+    reference_images_b64: list[str] | None = None,
     width: int = 1024,
     height: int = 1024,
     safety_tolerance: int = 2,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Call FLUX.2 [pro] image editing endpoint.
 
@@ -81,7 +81,7 @@ def call_flux_edit(
     if not BFL_API_KEY:
         raise FluxGenerationError("BFL_API_KEY environment variable is not set.")
 
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "prompt": prompt,
         "input_image": input_image_b64,
         "width": width,
@@ -116,10 +116,10 @@ def call_flux_edit(
 
 def poll_flux_result(
     polling_url: str,
-    request_id: Optional[str] = None,
+    request_id: str | None = None,
     timeout: float = 120.0,
     interval: float = 0.5,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Poll the FLUX.2 polling_url until the result status is 'Ready' or an error.
 
@@ -175,7 +175,7 @@ def poll_flux_result(
         time.sleep(interval)
 
 
-def load_assets_from_folder(base_dir: str) -> Dict[str, List[Dict[str, Any]]]:
+def load_assets_from_folder(base_dir: str) -> dict[str, list[dict[str, Any]]]:
     """
     Scan a base directory and build the asset dictionary automatically.
 
@@ -224,14 +224,14 @@ def load_assets_from_folder(base_dir: str) -> Dict[str, List[Dict[str, Any]]]:
     if not base_path.is_dir():
         raise ValueError(f"Assets base directory does not exist: {base_path}")
 
-    assets: Dict[str, List[Dict[str, Any]]] = {}
+    assets: dict[str, list[dict[str, Any]]] = {}
 
     for sub in base_path.iterdir():
         if not sub.is_dir():
             continue
 
         asset_class = sub.name
-        items: List[Dict[str, Any]] = []
+        items: list[dict[str, Any]] = []
 
         for f in sub.iterdir():
             if f.is_file() and f.suffix.lower() in IMAGE_EXTENSIONS:
@@ -255,10 +255,10 @@ def load_assets_from_folder(base_dir: str) -> Dict[str, List[Dict[str, Any]]]:
 
 
 def select_assets_for_image(
-    assets: Dict[str, List[Dict[str, Any]]],
-    used_ids_per_class: Dict[str, set],
-    allowed_ids_per_class: Optional[Dict[str, Set[str]]] = None,
-) -> Dict[str, Dict[str, Any]]:
+    assets: dict[str, list[dict[str, Any]]],
+    used_ids_per_class: dict[str, set],
+    allowed_ids_per_class: dict[str, set[str]] | None = None,
+) -> dict[str, dict[str, Any]]:
     """
     For each asset class (e.g. 'jackets', 'pants', 'models'), choose one asset.
 
@@ -281,7 +281,7 @@ def select_assets_for_image(
     dict
         Mapping of asset_class -> chosen asset dict for this image.
     """
-    selection: Dict[str, Dict[str, Any]] = {}
+    selection: dict[str, dict[str, Any]] = {}
 
     for asset_class, items in assets.items():
         if not items:
@@ -312,8 +312,8 @@ def select_assets_for_image(
 
 
 def choose_base_and_references(
-    selected_assets: Dict[str, Dict[str, Any]]
-) -> Tuple[Tuple[str, Dict[str, Any]], List[Tuple[str, Dict[str, Any]]]]:
+    selected_assets: dict[str, dict[str, Any]]
+) -> tuple[tuple[str, dict[str, Any]], list[tuple[str, dict[str, Any]]]]:
     """
     Decide which asset becomes the base input image vs. reference images.
 
@@ -344,7 +344,7 @@ def choose_base_and_references(
 
 def build_prompt(
     base_prompt: str,
-    selected_assets: Dict[str, Dict[str, Any]],
+    selected_assets: dict[str, dict[str, Any]],
     base_asset_class: str,
 ) -> str:
     """
@@ -407,7 +407,7 @@ class FluxBatchSession:
 
     def __init__(self, assets_base_dir: str):
         self.assets = load_assets_from_folder(assets_base_dir)
-        self.used_ids_per_class: Dict[str, Set[str]] = {}
+        self.used_ids_per_class: dict[str, set[str]] = {}
 
     def generate_images_for_group(
         self,
@@ -416,8 +416,8 @@ class FluxBatchSession:
         num_images: int = 5,
         width: int = 1024,
         height: int = 1024,
-        preferred_asset_ids: Optional[Dict[str, Set[str]]] = None,
-    ) -> List[Dict[str, Any]]:
+        preferred_asset_ids: dict[str, set[str]] | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Generate edited images for a single target group using FLUX.2.
 
@@ -454,7 +454,7 @@ class FluxBatchSession:
         FluxGenerationError
             If any FLUX.2 call fails.
         """
-        group_results: List[Dict[str, Any]] = []
+        group_results: list[dict[str, Any]] = []
 
         logger.info(
             "Generating %s images for %s", num_images, target_group
@@ -523,7 +523,7 @@ class FluxBatchSession:
         return group_results
 
 
-def print_concise_summary(results: Dict[str, List[Dict[str, Any]]]) -> None:
+def print_concise_summary(results: dict[str, list[dict[str, Any]]]) -> None:
     """
     Print a short, human-readable summary of generated images.
 
@@ -573,7 +573,7 @@ if __name__ == "__main__":
 
     try:
         session = FluxBatchSession(assets_base_dir=ASSETS_BASE_DIR)
-        all_results: Dict[str, List[Dict[str, Any]]] = {}
+        all_results: dict[str, list[dict[str, Any]]] = {}
 
         for group in target_groups:
             all_results[group] = session.generate_images_for_group(

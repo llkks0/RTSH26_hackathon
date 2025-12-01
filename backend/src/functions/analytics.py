@@ -26,7 +26,6 @@ from .types import (
     GeneratedAnalytics,
 )
 
-
 DEFAULT_MODEL = 'gpt-4o-mini'
 
 

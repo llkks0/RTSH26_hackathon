@@ -12,9 +12,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel
 
+from campaigns.models import *  # noqa: F403
+
 # Import models to register them with SQLModel
 from models import *  # noqa: F403
-from campaigns.models import *  # noqa: F403
 
 # Database configuration
 DATABASE_URL = os.getenv(
