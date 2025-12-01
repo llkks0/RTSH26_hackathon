@@ -1,4 +1,4 @@
-name: members-platform
+name: rtsh26-hackathon-backend
 
 services:
   db:
